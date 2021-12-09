@@ -1,0 +1,4 @@
+pyg-base
+numba
+xarray
+bottleneck
