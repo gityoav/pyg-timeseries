@@ -36,10 +36,8 @@ def _fnna(a, n):
                 return j
             
 
-@loop_all
-@pd2np
 @compiled
-def _ffill(a, n=0, prev=np.nan, i=0):
+def _ffill1d(a, n, prev, i):
     res = a.copy()
     for j in range(a.shape[0]):
         if np.isnan(a[j]):
@@ -55,6 +53,41 @@ def _ffill(a, n=0, prev=np.nan, i=0):
             i = 0
             prev = a[j]
     return res, prev, i
+
+
+def _ffill2d(a, n, prev, i):
+    res = a.copy()
+    if n:
+        for j in range(a.shape[0]):
+            mask = np.isnan(res[j])
+            i[mask]+=1
+            i[~mask] = 0
+            prev[i>n] = np.nan
+            res[j][mask] = prev[mask]
+            prev = res[j].copy()
+    else:
+        for j in range(a.shape[0]):
+            mask = np.isnan(res[j])
+            res[j][mask] = prev[mask]
+            prev = res[j]
+    return res, prev, i
+
+@loop(dict, list)
+@pd2np
+def _ffill(a, n = 0, prev = None, i = None):
+    if len(a.shape) == 1:
+        if i is None:
+            i = 0
+        if prev is None:
+            prev = np.nan
+        return _ffill1d(a, n, prev , i)
+    else:            
+        if i is None:
+            i = np.zeros(a[0].shape)
+        if prev is None:
+            prev = i + np.nan
+        return _ffill2d(a, n, prev , i)
+
 
 @loop_all
 @pd2np
@@ -406,7 +439,7 @@ def ffill(a, n=0, axis = 0, data = None, state = None):
     >>> a = np.array([np.nan,np.nan,1,np.nan,np.nan,2,np.nan,np.nan,np.nan])
     >>> fnna(a, n=-2)
     """
-    state = state or Dict(prev = np.nan, i = 0)
+    state = state or Dict(prev = None, i = None)
     return first_(_ffill(a, n=n, axis = axis, **state))
 
 def ffill_(a, n=0, axis = 0, instate = None):
@@ -415,7 +448,7 @@ def ffill_(a, n=0, axis = 0, instate = None):
     supports state manegement
     
     """
-    state = instate or dict(prev = np.nan, i = 0)
+    state = instate or dict(prev = None, i = None)
     return _data_state(['data', 'prev', 'i'],_ffill(a, n=n, axis = axis, **state))
 
 ffill_.output = ['data', 'state']

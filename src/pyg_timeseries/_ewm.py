@@ -1,4 +1,4 @@
-import numpy as np; import pandas as pd; import xarray as xr
+import numpy as np; import pandas as pd
 from pyg_timeseries._math import stdev_calculation_ewm, skew_calculation, cor_calculation_ewm, corr_calculation_ewm, LR_calculation_ewm, variance_calculation_ewm
 from pyg_timeseries._decorators import compiled, first_, _data_state
 from pyg_base import pd2np, clock, loop_all, loop, is_pd, is_df, presync
@@ -204,37 +204,9 @@ def _ewmcor(a, b, ba, n, time, t = np.nan, t0 = 0, a1 = 0, a2 = 0, b1 = 0, b2 = 
 @compiled
 def _ewmcorr(a, n, a0 = None, a1 = None, a2 = None, aa0 = None, aa1 = None, w2 = None, min_sample = 0.25, bias = False):
     """
-    >>> from pyg import * 
-    >>> rtn = np.random.normal(0,1,10000)
-    >>> x0 = ewmxo(rtn, 10, 20, 30)[50:]
-    >>> x1 = ewmxo(rtn, 20, 40, 30)[50:]
-    >>> x2 = ewmxo(rtn, 5, 10, 30)[50:]
-    >>> a = np.array([x0,x1]).T    
-    
-    pd.DataFrame(a).corr()
-              0         1
-    0  1.000000  0.865338
-    1  0.865338  1.000000
-
-    n = 50
-    min_sample = 0.25; bias = False    
-    
-    res, a0, a1, a2, aa0, aa1, w2 = _ewmcorr(a, n, min_sample = min_sample, bias = bias)
-    res[0]    
-    res[-1]
-    
-    res, a0, a1, a2, aa0, aa1, w2 = _ewmcorr(a, n, a0 = a0, a1 = a1, a2 = a2, aa0 = aa0, aa1 = aa1, w2 = w2, min_sample = min_sample, bias = bias)
-    res[0]
-
-
-    >>> a = np.array([x0,x1,x2]).T    
-    >>> a = pd.DataFrame(a, drange(1-len(a)), columns = ['a', 'b', 'c'])
-    res, a0, a1, a2, aa0, aa1, w2 = _ewmcorr(ts, n, min_sample = min_sample, bias = bias)
-    
-
 
     """
-    w = _w(n)
+    p = w = _w(n)
     v = 1 - w
     m = a.shape[1]
     res = np.zeros((a.shape[0], m, m))
@@ -246,25 +218,25 @@ def _ewmcorr(a, n, a0 = None, a1 = None, a2 = None, aa0 = None, aa1 = None, w2 =
     w2 = np.zeros(m) if w2 is None else w2
     for i in range(a.shape[0]):
         for j in range(m):
+            if ~np.isnan(a[i,j]):
+                w2[j] = w2[j] * p**2 + v**2
+                a0[j] = a0[j] * p + v
+                a1[j] = a1[j] * p + v * a[i,j]
+                a2[j] = a2[j] * p + v * a[i,j] ** 2        
+        for j in range(m):
             res[i, j, j] = 1.
             if np.isnan(a[i,j]):
                 res[i, j, :] = np.nan #if i == 0 else res[i-1, j, :] # we ffill correlations
                 res[i, :, j] = np.nan #if i == 0 else res[i-1, :, j]
             else:
-                p = w
-                w2[j] = w2[j] * p**2 + v**2
-                a0[j] = a0[j] * p + v
-                a1[j] = a1[j] * p + v * a[i,j]
-                a2[j] = a2[j] * p + v * a[i,j] ** 2
-        
-            for k in range(j):
-                if ~np.isnan(a[i,k]):
-                    aa0[j,k] = aa0[j,k] * p + v 
-                    aa1[j,k] = aa1[j,k] * p + v * a[i, j] * a[i, k]
-                    res[i, k, j] = res[i, j, k] = corr_calculation_ewm(a0 = a0[j], a1 = a1[j], a2 = a2[j], aw2 = w2[j], 
-                                                        b0 = a0[k], b1 = a1[k], b2 = a2[k], bw2 = w2[k],
-                                                        ab = aa1[j,k], ab0 = aa0[j,k],
-                                                        min_sample = min_sample, bias = bias)                    
+                for k in range(j):
+                    if ~np.isnan(a[i,k]):
+                        aa0[j,k] = aa0[j,k] * p + v 
+                        aa1[j,k] = aa1[j,k] * p + v * a[i, j] * a[i, k]
+                        res[i, k, j] = res[i, j, k] = corr_calculation_ewm(a0 = a0[j], a1 = a1[j], a2 = a2[j], aw2 = w2[j], 
+                                                                           b0 = a0[k], b1 = a1[k], b2 = a2[k], bw2 = w2[k],
+                                                                           ab = aa1[j,k], ab0 = aa0[j,k],
+                                                                           min_sample = min_sample, bias = bias)                    
     return res, a0, a1, a2, aa0, aa1, w2
 
 
@@ -282,15 +254,14 @@ def ewmcorr_(a, n, min_sample = 0.25, bias = False, instate = None):
         return dict(data = res, state = dict(a0=a0, a1=a1, a2=a2, aa0=aa0, aa1=aa1, w2 = w2))
     elif is_df(a):
         index = a.index
+        columns = list(a.columns)
         res, a0, a1, a2, aa0, aa1, w2 = _ewmcorr(a.values, n, min_sample = min_sample, bias = bias, **state)
         state = dict(a0=a0, a1=a1, a2=a2, aa0=aa0, aa1=aa1, w2 = w2)
         if a.shape[1] == 2:
             res = pd.Series(res[:,0,1], index)
             return dict(data = res, state = state)
         else:
-            columns = list(a.columns)
-            ds = xr.Dataset(data_vars = dict(cor = (['index', 'x', 'y'], res)), 
-                       coords = dict(index = index, x = columns, y = columns))
+            ds = dict(data = res, columns = columns, index = index)
             return dict(data = ds, state = state)
     
 
