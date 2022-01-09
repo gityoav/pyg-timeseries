@@ -1,4 +1,4 @@
-from pyg_timeseries import ewma, ewmstd, ewmrms, ewmskew, ewmLR
+from pyg_timeseries import ewma, ewmstd, ewmrms, ewmskew, ewmLR, ewmcor, ewmcorr, ts_max
 from pyg_base import eq, dt, calendar, drange, Dict
 import pandas as pd; import numpy as np
 
@@ -48,3 +48,17 @@ def test_ewm_LR():
     LR3 = ewmLR(a,b,50)
     assert eq(LR2.a0, LR3[0])
     assert eq(LR2.a1, LR3[1])
+
+def test_ewmcor():
+    """ the two functions are not identical but should be pretty close """
+    np.random.seed(0)
+    a = np.random.normal(0,1,(1000,10)) 
+    a = a + np.random.normal(0, 1, (1000, 1))
+    res = ewmcorr(a, 20)
+    for i in range(10):
+        for j in range(i):        
+            x = ewmcor(a[:,i], a[:, j], 20)
+            y = res[:, i, j]
+            assert ts_max(abs(x - y)[20:])<0.05
+
+    
