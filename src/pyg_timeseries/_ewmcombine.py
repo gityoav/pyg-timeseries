@@ -1,4 +1,4 @@
-from pyg_base import df_reindex, df_concat, is_nums, Dict, mul_
+from pyg_base import df_reindex, df_concat, is_nums, Dict, mul_, loop, dictable, try_back
 from pyg_timeseries._rolling import na2v, ffill, v2na
 from pyg_timeseries._ewm import ewma, ewmcorr, ewmstd
 import numpy as np
@@ -96,6 +96,17 @@ def _ewmcombine(a, w, n = 1024, vol_days = None, full = False):
     data = x/vol
     return dict(data = data, vol = vol, rho = erho, mult = mult, cor = c_ if full else None, vols = vols if vol_days else 1)
 
+
+@loop(list)
+def _i(value, i):
+    if isinstance(value, np.ndarray) and len(value.shape) > 1:
+        return value[:, i] if value.shape[1]>1 else value[:, 0]
+    elif isinstance(value, pd.DataFrame):
+        return value.iloc[:, i] if value.shape[1]>1 else value.iloc[:,0]
+    else:
+        return value        
+    
+
 def ewmcombine(tss, wgts, n = 1024, full = False, join = 'oj', method = None):
     """
     We expect tss and wgts to be provided as lists at the moment
@@ -121,6 +132,14 @@ def ewmcombine(tss, wgts, n = 1024, full = False, join = 'oj', method = None):
         DESCRIPTION.
 
     """
+    cols = [tuple(ts.columns) for ts in tss if len(ts.shape)==2 and ts.shape[1] > 1]
+    if len(cols):
+        assert len(set(cols)) == 1
+        cols = cols[0]
+        res = Dict(dictable([ewmcombine(_i(tss, i), _i(wgts, i), n = n, full = full, join = join, method = method) for i in range(len(cols))]))
+        res = res.do(try_back(lambda v: df_concat(v, cols)))
+        return res
+        
     if is_nums(wgts):
         tss, wgts = zip(*[(ts if w>0 else -ts, abs(w)) for ts, w in zip(tss, wgts) if w!=0]) ## we drop any zero weights and invert any negative weights
         a = df_concat(list(tss))
@@ -135,5 +154,32 @@ def ewmcombine(tss, wgts, n = 1024, full = False, join = 'oj', method = None):
     return res
 
 ewmcombine.output = ['data', 'vol', 'rho', 'mult', 'cor', 'vols']
+
+def ewmcombined(tss, wgts, n = 1024, full = False, join = 'oj', method = None):
+    """
+    We expect tss and wgts to be provided as lists at the moment
+
+    Parameters
+    ----------
+    tss : list of timeseries
+        the data we want to combine into a single signal
+    wgts : list of weights, either floats or timeseries
+        
+    n : TYPE, optional
+        DESCRIPTION. The default is 1024.
+    full : TYPE, optional
+        DESCRIPTION. The default is False.
+    join : TYPE, optional
+        DESCRIPTION. The default is 'oj'.
+    method : TYPE, optional
+        DESCRIPTION. The default is None.
+
+    Returns
+    -------
+    res : TYPE
+        DESCRIPTION.
+
+    """
+    return ewmcombine(tss, wgts, n = n, full = full, join = join, method = method)['data']
 
     
