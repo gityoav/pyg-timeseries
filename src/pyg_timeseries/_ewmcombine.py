@@ -98,7 +98,7 @@ def _ewmcombine(a, w, n = 1024, vol_days = None, full = False):
 
 
 @loop(list)
-def _i(value, i):
+def _col(value, i):
     if isinstance(value, np.ndarray) and len(value.shape) > 1:
         return value[:, i] if value.shape[1]>1 else value[:, 0]
     elif isinstance(value, pd.DataFrame):
@@ -135,11 +135,10 @@ def ewmcombine(tss, wgts, n = 1024, full = False, join = 'oj', method = None):
     cols = [tuple(ts.columns) for ts in tss if len(ts.shape)==2 and ts.shape[1] > 1]
     if len(cols):
         assert len(set(cols)) == 1
-        cols = cols[0]
-        res = Dict(dictable([ewmcombine(_i(tss, i), _i(wgts, i), n = n, full = full, join = join, method = method) for i in range(len(cols))]))
+        cols = list(cols[0])
+        res = Dict(dictable([ewmcombine(_col(tss, i), _col(wgts, i), n = n, full = full, join = join, method = method) for i in range(len(cols))]))
         res = res.do(try_back(lambda v: df_concat(v, cols)))
-        return res
-        
+        return res        
     if is_nums(wgts):
         tss, wgts = zip(*[(ts if w>0 else -ts, abs(w)) for ts, w in zip(tss, wgts) if w!=0]) ## we drop any zero weights and invert any negative weights
         a = df_concat(list(tss))
@@ -148,6 +147,8 @@ def ewmcombine(tss, wgts, n = 1024, full = False, join = 'oj', method = None):
         tss, wgts = zip(*[(mul_(ts,np.sign(df_reindex(w, ts, 'ffill'))), abs(w)) for ts, w in zip(tss, wgts)]) ## if we is a timeseries, we multiply the two after reindexing w to ts
         a = df_concat(list(tss))
         w = df_concat([df_reindex(wgt, a.index, method = 'ffill') for wgt in wgts]).values
+    if len(tss) == 1:
+        return Dict(data = tss[0], vol = None, rho = None, mult = None, cor = None, vols = None)            
     idx = a.index
     res = _ewmcombine(a.values, w, n = 1024, vol_days = 120, full = False)
     res = Dict({k : (pd.Series(v, idx) if len(v.shape) == 1 else [pd.Series(v[:,i], idx) for i in range(v.shape[1])]) if isinstance(v, np.ndarray) and v.shape[0] == len(idx) else v for k, v in res.items()})

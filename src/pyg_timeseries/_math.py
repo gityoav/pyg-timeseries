@@ -11,6 +11,15 @@ def stdev_calculation(t0, t1, t2, default = np.nan):
         return default
 
 @compiled
+def std_calculation(t0, t1, t2, default = np.nan):
+    if t0 > 1:
+        p = t0 #biased :-)
+        return np.sqrt(t2/p - (t1**2)/(p*t0))
+    else:
+        return default
+
+
+@compiled
 def stdev_calculation_ewm(t0, t1, t2, w2, min_sample, bias = False):
     """
     The nicest calculation of unbiased variance under variable weights is available here:
@@ -43,6 +52,23 @@ def variance_calculation_ewm(t0, t1, t2, w2, min_sample, bias = False):
     else:
         r = 1 - w2/(t0**2)
         return variance/r
+
+
+@compiled
+def cor_calculation(t0, a1, a2, b1, b2, ab, min_sample):
+    if t0<=min_sample:
+        return np.nan
+    Eab = ab/t0
+    Ea = a1/t0
+    Eb = b1/t0
+    STDa = std_calculation(t0, a1, a2) # to match the pandas implementation, we use the biased std_calculation estimator
+    STDb = std_calculation(t0, b1, b2)
+    denom = STDa * STDb
+    if denom > 0:
+        return (Eab - Ea*Eb)/denom
+    else:
+        return np.nan
+
 
 @compiled
 def cor_calculation_ewm(t0, a1, a2, b1, b2, w2, ab, min_sample, bias = False):

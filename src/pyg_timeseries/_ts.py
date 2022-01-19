@@ -1,5 +1,5 @@
 import numpy as np
-from pyg_timeseries._math import stdev_calculation, skew_calculation
+from pyg_timeseries._math import stdev_calculation, skew_calculation, cor_calculation
 from pyg_timeseries._decorators import compiled, first_, _data_state
 from pyg_timeseries._rolling import _vec
 from pyg_base import pd2np, loop_all
@@ -33,6 +33,7 @@ def _moments(a, vec):
                 v = v  * a[i]
             res[-1] += v
     return res
+
 
 @pd2np
 @compiled
@@ -265,6 +266,72 @@ def ts_mean_(a, axis = 0, data = None, instate = None):
     state = instate or {}
     return _zip(_ts_mean(a, axis = axis, **state))
 
+
+@loop_all
+@pd2np
+@compiled
+def _ts_cor(a, b, min_sample, vec):
+    res = vec.copy()
+    for i in range(a.shape[0]):
+        if not np.isnan(a[i]) and not np.isnan(b[i]):
+            res[0] += 1
+            res[1] += a[i]
+            res[2] += a[i]**2
+            res[3] += b[i]
+            res[4] += b[i]**2
+            res[5] += a[i]*b[i]
+    return cor_calculation(t0 = res[0], a1 = res[1], a2 = res[2], b1 = res[3], b2 = res[4], ab = res[5], min_sample = min_sample), res
+    
+
+def ts_cor(a, b, min_sample = 3, axis = 0, data = None, state = None):
+    """
+    ts_cor(a) is equivalent to a.cor()[0][1]
+    
+    - supports numpy arrays 
+    - handles nan
+    - supports state management
+    
+    :Example: matching pandas
+    -------------------------
+    >>> # create sample data:
+    >>> from pyg_timeseries import *; import pandas as pd; import numpy as np
+    >>> a = pd.Series(np.random.normal(0,1,10000), drange(-9999)); a[a>0.5] = np.nan
+    >>> b = pd.Series(np.random.normal(0,1,10000), drange(-9999)); b[b>0.5] = np.nan
+    >>> state = data = None; min_sample = 3; axis = 0
+    >>> df = pd.concat([a,b], axis=1)
+    >>> assert abs(df.corr()[0][1] - ts_cor(a, b))<1e-10
+
+    :Example: slightly faster than pandas
+    -------------------------------------
+    %timeit ts_cor(a, b)
+    245 µs ± 6.43 µs per loop (mean ± std. dev. of 7 runs, 1000 loops each)
+    %timeit df.corr()[0][1]
+    575 µs ± 13 µs per loop (mean ± std. dev. of 7 runs, 1000 loops each)    
+
+    :Example: numpy 
+    -----------------------------------
+    >>> assert ts_cor(a.values, b.values) == ts_cor(a,b)
+
+    :Example: state management
+    -------------------------------------------
+    >>> old = ts_std_(a.iloc[:2000])
+    >>> new = ts_std(a.iloc[2000:], vec = old.vec)
+    >>> assert new == ts_std(a)
+
+    """
+    state = state or dict(vec = _vec(None,6,0.))
+    rtn = first_(_ts_cor(a, b, min_sample = min_sample, **state))
+    return rtn
+
+def ts_cor_(a, b, min_sample = 3, axis = 0, data = None, instate = None):
+    """
+    ts_cor_(a, b) is equivalent to ts_cor(a,b) except vec is also returned.
+    See ts_std for full documentation    
+    """
+    state = instate or dict(vec = _vec(None,6,0.))
+    return _zip(_ts_cor(a, b, min_sample, axis = axis, **state))
+
+
 @loop_all
 def _ts_std(a, vec = None):
     vec = _vec(vec,3,0.)
@@ -433,6 +500,8 @@ def ts_skew_(a, bias = False, min_sample = 0.25, axis = 0, data = None, instate 
     return _zip(_ts_skew(a, bias = bias, min_sample = min_sample, axis = axis, **state))
 
 
+
+ts_cor_.output = ['data', 'state']
 ts_min_.output = ['data', 'state']
 ts_max_.output = ['data', 'state']
 ts_count_.output = ['data', 'state']
