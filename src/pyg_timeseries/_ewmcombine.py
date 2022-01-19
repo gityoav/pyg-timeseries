@@ -1,7 +1,8 @@
-from pyg_base import df_reindex
+from pyg_base import df_reindex, df_concat, is_nums, Dict, mul_
 from pyg_timeseries._rolling import na2v, ffill, v2na
 from pyg_timeseries._ewm import ewma, ewmcorr, ewmstd
 import numpy as np
+import pandas as pd
 
 def _ewmcombine(a, w, n = 1024, vol_days = None, full = False):
     """
@@ -95,6 +96,44 @@ def _ewmcombine(a, w, n = 1024, vol_days = None, full = False):
     data = x/vol
     return dict(data = data, vol = vol, rho = erho, mult = mult, cor = c_ if full else None, vols = vols if vol_days else 1)
 
-def ewmcombine(a, w, n = 1024, full = False, join = 'ij', method = None):
-    df_reindex(a, )
+def ewmcombine(tss, wgts, n = 1024, full = False, join = 'oj', method = None):
+    """
+    We expect tss and wgts to be provided as lists at the moment
+
+    Parameters
+    ----------
+    tss : list of timeseries
+        the data we want to combine into a single signal
+    wgts : list of weights, either floats or timeseries
+        
+    n : TYPE, optional
+        DESCRIPTION. The default is 1024.
+    full : TYPE, optional
+        DESCRIPTION. The default is False.
+    join : TYPE, optional
+        DESCRIPTION. The default is 'oj'.
+    method : TYPE, optional
+        DESCRIPTION. The default is None.
+
+    Returns
+    -------
+    res : TYPE
+        DESCRIPTION.
+
+    """
+    if is_nums(wgts):
+        tss, wgts = zip(*[(ts if w>0 else -ts, abs(w)) for ts, w in zip(tss, wgts) if w!=0]) ## we drop any zero weights and invert any negative weights
+        a = df_concat(list(tss))
+        w = np.array([list(wgts)] * len(a))
+    else:
+        tss, wgts = zip(*[(mul_(ts,np.sign(df_reindex(w, ts, 'ffill'))), abs(w)) for ts, w in zip(tss, wgts)]) ## if we is a timeseries, we multiply the two after reindexing w to ts
+        a = df_concat(list(tss))
+        w = df_concat([df_reindex(wgt, a.index, method = 'ffill') for wgt in wgts]).values
+    idx = a.index
+    res = _ewmcombine(a.values, w, n = 1024, vol_days = 120, full = False)
+    res = Dict({k : (pd.Series(v, idx) if len(v.shape) == 1 else [pd.Series(v[:,i], idx) for i in range(v.shape[1])]) if isinstance(v, np.ndarray) and v.shape[0] == len(idx) else v for k, v in res.items()})
+    return res
+
+ewmcombine.output = ['data', 'vol', 'rho', 'mult', 'cor', 'vols']
+
     
