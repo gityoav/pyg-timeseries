@@ -1,9 +1,12 @@
-from pyg_base import df_reindex, df_concat, is_nums, Dict, mul_, loop, dictable, try_back
-from pyg_timeseries._rolling import na2v, ffill, v2na
+from pyg_base import df_reindex, df_concat, is_nums, Dict, mul_, loop, dictable, try_back, is_df, pd2np
+from pyg_timeseries._rolling import na2v, ffill, v2na, fnna
 from pyg_timeseries._ewm import ewma, ewmcorr, ewmstd
+from pyg_timeseries._pandas import fnna_like
 import numpy as np
 import pandas as pd
 
+
+@pd2np
 def _ewmcombine(a, w, n = 1024, vol_days = None, full = False):
     """
     We assume all the joining together etc. is done
@@ -62,18 +65,22 @@ def _ewmcombine(a, w, n = 1024, vol_days = None, full = False):
     E(X^2) = w^T * C * w
 
     """
+    fs = fnna(a)
     a_ = na2v(ffill(a))
     w_ = na2v(ffill(w))
+    for i, j in enumerate(fs):
+        w_[:j, i] = 0
     if vol_days:
         vols = v2na(ffill(ewmstd(a, vol_days)))
         a_ = a_ / vols
     else:
         vols = 1
     x = np.sum(a_ * w_, axis = 1)
-    x2 = x**2
     w1 = np.sum(w_, axis = 1)
+    x2 = x**2
     w2 = np.sum(w_ ** 2, axis = 1)
     wij = w1 ** 2 - w2
+    wij[wij == 0] = np.nan
     rho = (x2 - w2)/wij
     erho = ewma(rho, n) # this gives us our estimate for rho at time t
     if full:
@@ -107,7 +114,7 @@ def _col(value, i):
         return value        
     
 
-def ewmcombine(tss, wgts, n = 1024, full = False, join = 'oj', method = None):
+def ewmcombine(tss, wgts, n = 1024, vol_days = None, full = False, join = 'oj', method = None):
     """
     We expect tss and wgts to be provided as lists at the moment
 
@@ -132,6 +139,10 @@ def ewmcombine(tss, wgts, n = 1024, full = False, join = 'oj', method = None):
         DESCRIPTION.
 
     """
+    if is_df(tss):
+        wgts = fnna_like(tss, wgts).ffill()
+        return _ewmcombine(tss, wgts, n = n, vol_days = vol_days, full = full)      
+
     cols = [tuple(ts.columns) for ts in tss if len(ts.shape)==2 and ts.shape[1] > 1]
     if len(cols):
         assert len(set(cols)) == 1
@@ -150,13 +161,13 @@ def ewmcombine(tss, wgts, n = 1024, full = False, join = 'oj', method = None):
     if len(tss) == 1:
         return Dict(data = tss[0], vol = None, rho = None, mult = None, cor = None, vols = None)            
     idx = a.index
-    res = _ewmcombine(a.values, w, n = 1024, vol_days = 120, full = False)
+    res = _ewmcombine(a.values, w, n = n, vol_days = vol_days, full = full)
     res = Dict({k : (pd.Series(v, idx) if len(v.shape) == 1 else [pd.Series(v[:,i], idx) for i in range(v.shape[1])]) if isinstance(v, np.ndarray) and v.shape[0] == len(idx) else v for k, v in res.items()})
     return res
 
 ewmcombine.output = ['data', 'vol', 'rho', 'mult', 'cor', 'vols']
 
-def ewmcombined(tss, wgts, n = 1024, full = False, join = 'oj', method = None):
+def ewmcombined(tss, wgts, n = 1024, vol_days = None, full = False, join = 'oj', method = None):
     """
     We expect tss and wgts to be provided as lists at the moment
 

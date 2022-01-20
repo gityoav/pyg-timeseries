@@ -16,3 +16,4 @@ from pyg_timeseries._ts import ts_std, ts_sum, ts_mean, ts_skew, ts_count, ts_mi
 from pyg_timeseries._ewmxo import ewmxo, ewmxo_, ou_factor
 from pyg_timeseries._xrank import xrank
 from pyg_timeseries._ewmcombine import ewmcombine, ewmcombined
+from pyg_timeseries._pandas import fnna_like

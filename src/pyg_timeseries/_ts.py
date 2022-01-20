@@ -199,7 +199,7 @@ def ts_sum(a, axis = 0, data = None, state = None):
     >>> assert new == ts_sum(a)
     """
     state = state or {}
-    if is_nums(a):
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
         a = np.array(as_list(a))
     return first_(_ts_sum(a, axis = axis, **state))
 
@@ -209,7 +209,7 @@ def ts_sum_(a, axis = 0, data = None, instate = None):
     See ts_sum for full documentation        
     """
     state = instate or {}
-    if is_nums(a):
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
         a = np.array(as_list(a))
     return _zip(_ts_sum(a, axis = axis, **state))
 
@@ -260,7 +260,7 @@ def ts_mean(a, axis = 0, data = None, state = None):
     >>> assert new == ts_mean(a)
     """
     state = state or {}
-    if is_nums(a):
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
         a = np.array(as_list(a))
     return first_(_ts_mean(a, axis = axis, **state))
 
@@ -270,7 +270,8 @@ def ts_mean_(a, axis = 0, data = None, instate = None):
     See ts_mean for full documentation        
     """
     state = instate or {}
-    if is_nums(a):
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
+
         a = np.array(as_list(a))
     return _zip(_ts_mean(a, axis = axis, **state))
 
@@ -337,9 +338,9 @@ def ts_cor_(a, b, min_sample = 3, axis = 0, data = None, instate = None):
     See ts_std for full documentation    
     """
     state = instate or dict(vec = _vec(None,6,0.))
-    if is_nums(a):
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
         a = np.array(as_list(a))
-    if is_nums(b):
+    if is_num(b) or (isinstance(b, list) and is_nums(b)):
         b = np.ndarray(as_list(b))
     return _zip(_ts_cor(a, b, min_sample, axis = axis, **state))
 
@@ -379,7 +380,7 @@ def ts_std(a, axis = 0, data = None, state = None):
 
     """
     state = state or {}
-    if is_nums(a):
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
         a = np.array(as_list(a))
     return first_(_ts_std(a, axis = axis, **state))
 
@@ -389,7 +390,7 @@ def ts_std_(a, axis = 0, data = None, instate = None):
     See ts_std for full documentation    
     """
     state = instate or {}
-    if is_nums(a):
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
         a = np.array(as_list(a))
     return _zip(_ts_std(a, axis = axis, **state))
 
@@ -442,7 +443,7 @@ def ts_rms(a, axis = 0, data = None, state = None):
 
     """
     state = state or {}
-    if is_nums(a):
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
         a = np.array(as_list(a))
     return first_(_ts_rms(a, axis = axis, **state))
 
@@ -452,7 +453,7 @@ def ts_rms_(a, axis = 0, data = None, instate = None):
     see ts_rms for full documentation
     """
     state = instate or {}
-    if is_nums(a):
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
         a = np.array(as_list(a))
     return _zip(_ts_rms(a, axis = axis, **state))
 
@@ -509,7 +510,7 @@ def ts_skew(a, bias = False, min_sample = 0.25, axis = 0, data = None, state = N
     >>> assert new == ts_skew(a)
     """
     state = state or {}
-    if is_nums(a):
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
         a = np.array(as_list(a))
     return first_(_ts_skew(a, bias = bias, min_sample = min_sample, axis = axis, **state))
     
@@ -519,7 +520,7 @@ def ts_skew_(a, bias = False, min_sample = 0.25, axis = 0, data = None, instate 
     See ts_skew for full details
     """
     state = instate or {}
-    if is_nums(a):
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
         a = np.array(as_list(a))
     return _zip(_ts_skew(a, bias = bias, min_sample = min_sample, axis = axis, **state))
 
