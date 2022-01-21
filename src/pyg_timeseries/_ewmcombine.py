@@ -101,7 +101,8 @@ def _ewmcombine(a, w, n = 1024, vol_days = None, full = False):
     vol = ffill(np.sqrt(variance))
     mult = 1/vol
     data = x/vol
-    return dict(data = data, vol = vol, rho = erho, mult = mult, cor = c_ if full else None, vols = vols if vol_days else 1)
+    normalized_mult = mult * w1
+    return dict(data = data, vol = vol, rho = erho, mult = mult, normalized_mult = normalized_mult, cor = c_ if full else None, vols = vols if vol_days else 1)
 
 
 @loop(list)
@@ -142,8 +143,9 @@ def ewmcombine(tss, wgts, n = 1024, vol_days = None, full = False, join = 'oj', 
     if is_df(tss):
         wgts = fnna_like(tss, wgts).ffill()
         return _ewmcombine(tss, wgts, n = n, vol_days = vol_days, full = full)      
-
-    cols = [tuple(ts.columns) for ts in tss if len(ts.shape)==2 and ts.shape[1] > 1]
+    if len(tss) == 1:
+        return Dict(data = tss[0], vol = None, rho = None, mult = 1/wgts[0], normalized_mult = 1, cor = None, vols = 1)            
+    cols = [tuple(ts.columns) for ts in tss if is_df(ts) and ts.shape[1] > 1]
     if len(cols):
         assert len(set(cols)) == 1
         cols = list(cols[0])
@@ -153,19 +155,19 @@ def ewmcombine(tss, wgts, n = 1024, vol_days = None, full = False, join = 'oj', 
     if is_nums(wgts):
         tss, wgts = zip(*[(ts if w>0 else -ts, abs(w)) for ts, w in zip(tss, wgts) if w!=0]) ## we drop any zero weights and invert any negative weights
         a = df_concat(list(tss))
-        w = np.array([list(wgts)] * len(a))
+        w = fnna_like(a, wgts, 0.).values.astype(float)
     else:
         tss, wgts = zip(*[(mul_(ts,np.sign(df_reindex(w, ts, 'ffill'))), abs(w)) for ts, w in zip(tss, wgts)]) ## if we is a timeseries, we multiply the two after reindexing w to ts
         a = df_concat(list(tss))
-        w = df_concat([df_reindex(wgt, a.index, method = 'ffill') for wgt in wgts]).values
+        w = df_concat([df_reindex(wgt, a.index, method = 'ffill') for wgt in wgts]).values.astype(float)
     if len(tss) == 1:
-        return Dict(data = tss[0], vol = None, rho = None, mult = None, cor = None, vols = None)            
+        return Dict(data = tss[0], vol = None, rho = None, mult = 1/wgts[0], normalized_mult = 1, cor = None, vols = 1)            
     idx = a.index
     res = _ewmcombine(a.values, w, n = n, vol_days = vol_days, full = full)
     res = Dict({k : (pd.Series(v, idx) if len(v.shape) == 1 else [pd.Series(v[:,i], idx) for i in range(v.shape[1])]) if isinstance(v, np.ndarray) and v.shape[0] == len(idx) else v for k, v in res.items()})
     return res
 
-ewmcombine.output = ['data', 'vol', 'rho', 'mult', 'cor', 'vols']
+ewmcombine.output = ['data', 'vol', 'rho', 'mult', 'normalized_mult',  'cor', 'vols']
 
 def ewmcombined(tss, wgts, n = 1024, vol_days = None, full = False, join = 'oj', method = None):
     """

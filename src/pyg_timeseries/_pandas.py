@@ -1,4 +1,4 @@
-from pyg_base import pd2np, is_num, is_rng, is_pd, df_reindex
+from pyg_base import pd2np, is_num, is_rng, is_pd
 from pyg_timeseries._rolling import fnna
 import numpy as np
 
