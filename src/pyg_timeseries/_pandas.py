@@ -50,7 +50,7 @@ def _fnna_like(source, target = 1., default = np.nan):
         a = target.copy()
     a = a.astype(type(default))
     if len(source.shape) == 1:
-        a[:f] = np.nan
+        a[:f] = default
     else:
         for i, j in enumerate(f):
             a[:j,i] = default

@@ -34,6 +34,22 @@ def _fnna(a, n):
             i = i+1
             if i == _n:
                 return j
+
+
+@loop_all
+@pd2np
+@compiled
+def _fnnz(a, n=1):
+    if n == 0:
+        raise ValueError('n must be non-zero')
+    i = 0
+    _n = abs(n)
+    s = (0,a.shape[0],1) if n>0 else (a.shape[0]-1,-1,-1)
+    for j in range(*s):
+        if not np.isnan(a[j]) and a[j]!=0.:
+            i = i+1
+            if i == _n:
+                return j
             
 
 @compiled
@@ -397,6 +413,28 @@ def fnna(a, n=1, axis = 0):
     
     """
     return _fnna(a, n, axis = axis)
+
+def fnnz(a, n=1, axis = 0):
+    """
+    returns the index in a of the nth first non-nan and non-zero.
+    
+    :Parameters:
+    ------------
+    a : array/timeseries
+    n: int, optional, default = 1
+
+    :Example:
+    ---------
+    >>> a = np.array([[np.nan,0.,1.,np.nan,np.nan,2,np.nan,np.nan,np.nan], [0.,0.,0.,np.nan,np.nan,2,np.nan,np.nan,np.nan]]).T
+    >>> #                        ^                                             ^                    ^
+    >>> #                      2nd pos                                 zeros dont count      first non-zero
+
+    >>> assert list(fnnz(a)) == [2,5] 
+    
+    """
+    return _fnnz(a, n, axis = axis)
+
+
 
 def bfill(a, n = -1, axis = 0):
     """
