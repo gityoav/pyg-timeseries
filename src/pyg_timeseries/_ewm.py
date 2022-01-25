@@ -1,7 +1,7 @@
 import numpy as np; import pandas as pd
 from pyg_timeseries._math import stdev_calculation_ewm, skew_calculation, cor_calculation_ewm, corr_calculation_ewm, LR_calculation_ewm, variance_calculation_ewm
 from pyg_timeseries._decorators import compiled, first_, _data_state
-from pyg_base import pd2np, clock, loop_all, loop, is_pd, is_df, presync
+from pyg_base import pd2np, clock, loop_all, loop, is_pd, is_df, presync, df_concat
 
 __all__ = ['ewma', 'ewmstd', 'ewmvar', 'ewmskew', 'ewmrms',  'ewmcor',  'ewmcorr', 'ewmLR', 'ewmGLM',
            'ewma_', 'ewmstd_', 'ewmskew_', 'ewmrms_', 'ewmcor_', 'ewmvar_','ewmLR_', 'ewmGLM_',]
@@ -240,32 +240,38 @@ def _ewmcorr(a, n, a0 = None, a1 = None, a2 = None, aa0 = None, aa1 = None, w2 =
     return res, a0, a1, a2, aa0, aa1, w2
 
 
-def ewmcorr_(a, n, min_sample = 0.25, bias = False, instate = None):
+def ewmcorr_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer'):
     """
     This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
     See ewmcorr for full details.
     
     """
     state = {} if instate is None else instate
-    if isinstance(a, np.ndarray):
-        res, a0, a1, a2, aa0, aa1, w2 = _ewmcorr(a, n, min_sample = min_sample, bias = bias, **state)
+    arr = df_concat(a, join = join)
+    if isinstance(arr, np.ndarray):
+        res, a0, a1, a2, aa0, aa1, w2 = _ewmcorr(arr, n, min_sample = min_sample, bias = bias, **state)
         if res.shape[1] == 2:
             res = res[:, 0, 1]
         return dict(data = res, state = dict(a0=a0, a1=a1, a2=a2, aa0=aa0, aa1=aa1, w2 = w2))
-    elif is_df(a):
-        index = a.index
-        columns = list(a.columns)
-        res, a0, a1, a2, aa0, aa1, w2 = _ewmcorr(a.values, n, min_sample = min_sample, bias = bias, **state)
+    elif is_df(arr):
+        index = arr.index
+        columns = list(arr.columns)
+        res, a0, a1, a2, aa0, aa1, w2 = _ewmcorr(arr.values, n, min_sample = min_sample, bias = bias, **state)
         state = dict(a0=a0, a1=a1, a2=a2, aa0=aa0, aa1=aa1, w2 = w2)
-        if a.shape[1] == 2:
+        if arr.shape[1] == 2:
             res = pd.Series(res[:,0,1], index)
             return dict(data = res, state = state)
         else:
             ds = dict(data = res, columns = columns, index = index)
             return dict(data = ds, state = state)
+    else:
+        raise ValueError('unsure how to calculate correlation matrix for a %s'%a)
+
+        
+        
     
 
-def ewmcorr(a, n, min_sample = 0.25, bias = False, instate = None):
+def ewmcorr(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer'):
     """
     This calculates a full correlation matrix as a timeseries. 
     The calculation is returned as an xarray.Dataset object, which is a multidimensional data structure.
@@ -296,7 +302,6 @@ def ewmcorr(a, n, min_sample = 0.25, bias = False, instate = None):
     >>> x1 = ewmxo(rtn, 20, 40, 30)[50:]
     >>> a = pd.DataFrame(np.array([x0,x1]).T, drange(-9949))
     >>> res = ewmcorr(a, n)
-    >>> res
     
     >>>     Out[130]: 
     >>>     1994-06-07         NaN
@@ -312,6 +317,8 @@ def ewmcorr(a, n, min_sample = 0.25, bias = False, instate = None):
     >>>     2021-09-02    0.875766
     >>>     Length: 9950, dtype: float64    
 
+    >>> # note: ewmcorr([pd.Series(x0, drange(-9949)),x1], 100) works too
+
     :Example: multi column ts
     ---------
     >>> rtn = np.random.normal(0,1,10000)
@@ -320,28 +327,22 @@ def ewmcorr(a, n, min_sample = 0.25, bias = False, instate = None):
     >>> x2 = ewmxo(rtn, 40, 80, 30)[50:]
     >>> a = pd.DataFrame(np.array([x0,x1,x2]).T, drange(-9949), ['a','b','c'])
     >>> ds = ewmcorr(a, n)
-    >>> ds
+    >>> ds.keys()
+    >>> dict_keys(['data', 'columns', 'index'])
     
-    >>> <xarray.Dataset>
-    >>> Dimensions:  (index: 9950, x: 3, y: 3)
-    >>> Coordinates:
-    >>>   * index    (index) datetime64[ns] 1994-06-07 1994-06-08 ... 2021-09-02
-    >>>   * x        (x) <U1 'a' 'b' 'c'
-    >>>   * y        (y) <U1 'a' 'b' 'c'
-    >>> Data variables:
-    >>>     cor      (index, x, y) float64 1.0 nan nan nan ... 0.9402 0.7254 0.9402 1.0
+    >>> ds['data'].shape
+    >>> (9950, 3, 3)
 
     To access individual correlations:
     
-    >>> a_vs_b = pd.Series(ds.loc[dict(x = 'a', y = 'b')].cor.values, ds.index.values)
+    >>> a_vs_b = pd.Series(ds['data'][:, 1, 2], ds['index'])
     
     To access all correlations to a:    
     
-    >>> subset = ds.loc[dict(x = 'a')]
-    >>> a_vs_all = pd.DataFrame(subset.cor.values, ds.index.values, subset.y.values)
+    >>> a_vs_all = pd.DataFrame(ds['data'][:,:,0], ds['index'], ds['columns'])
     >>> a_vs_all
     
-    >>>                   a         b         c
+    >>>               a         b         c
     >>> 1994-06-07  1.0       NaN       NaN
     >>> 1994-06-08  1.0       NaN       NaN
     >>> 1994-06-09  1.0       NaN       NaN
@@ -355,7 +356,7 @@ def ewmcorr(a, n, min_sample = 0.25, bias = False, instate = None):
     >>> 2021-09-02  1.0  0.875766  0.725399
     
     """
-    return ewmcorr_(a, n, min_sample = 0.25, bias = False, instate = None).get('data')
+    return ewmcorr_(a, n, min_sample = min_sample, bias = bias, instate = instate , join = join).get('data')
 
 
 

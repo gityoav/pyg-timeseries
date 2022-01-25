@@ -5,9 +5,9 @@ from pyg_timeseries._pandas import fnna_like
 import numpy as np
 import pandas as pd
 
-
+    
 @pd2np
-def _ewmcombine(a, w, n = 1024, vol_days = None, full = False):
+def _ewmcombine(a, w, n = 128, vol_days = None, corr = None):
     """
     We assume all the joining together etc. is done
     
@@ -18,6 +18,9 @@ def _ewmcombine(a, w, n = 1024, vol_days = None, full = False):
     w : np.ndarray
         2-dimensional array of weights
 
+    n : int
+        days for which we smooth the correlation estimate
+        
     Returns
     -------
     
@@ -83,8 +86,13 @@ def _ewmcombine(a, w, n = 1024, vol_days = None, full = False):
     wij[wij == 0] = np.nan
     rho = (x2 - w2)/wij
     erho = ewma(rho, n) # this gives us our estimate for rho at time t
+    if corr is True: 
+        corr = n
+    elif corr is False:
+        corr = None
+    full = corr is not None
     if full:
-        c = ewmcorr(a, n)
+        c = ewmcorr(a, corr) if isinstance(corr, int) else corr
         c_ = np.zeros(c.shape)
         variance = np.empty(c.shape[0])
         cip = np.zeros(c.shape[1:])
@@ -115,7 +123,7 @@ def _col(value, i):
         return value        
     
 
-def ewmcombine(tss, wgts, n = 1024, vol_days = None, full = False, join = 'oj', method = None):
+def ewmcombine(tss, wgts, n = 128, vol_days = None, corr = None, join = 'oj', method = None):
     """
     We expect tss and wgts to be provided as lists at the moment
 
@@ -123,16 +131,19 @@ def ewmcombine(tss, wgts, n = 1024, vol_days = None, full = False, join = 'oj', 
     ----------
     tss : list of timeseries
         the data we want to combine into a single signal
-    wgts : list of weights, either floats or timeseries
+    wgts : list/dataframe of weights, either floats or timeseries
         
-    n : TYPE, optional
-        DESCRIPTION. The default is 1024.
-    full : TYPE, optional
-        DESCRIPTION. The default is False.
-    join : TYPE, optional
-        DESCRIPTION. The default is 'oj'.
+    n : int, optional
+        Length of data for correlation calculation. 
+    corr : a 3-d numpy matrix. optional
+        The output from ewmcorr. If provided, a full calculation of correlation is used
+    vol_days:
+        The input assumes that tss are broadly N(0,1) if this is false, the correlation calculation will be off. 
+        You can set vol_days and we will normalize each tss on the fly. If so, the normalized data will be available in vols output
+    join : str, optional
+        how we join the tss to a single frame. The default is 'oj' for outer join.
     method : TYPE, optional
-        DESCRIPTION. The default is None.
+        how we fill nans when we join the tss to a single frame. The default is None .
 
     Returns
     -------
@@ -142,14 +153,14 @@ def ewmcombine(tss, wgts, n = 1024, vol_days = None, full = False, join = 'oj', 
     """
     if is_df(tss):
         wgts = fnna_like(tss, wgts).ffill()
-        return _ewmcombine(tss, wgts, n = n, vol_days = vol_days, full = full)      
+        return _ewmcombine(tss, wgts, n = n, vol_days = vol_days, corr = corr)      
     if len(tss) == 1:
         return Dict(data = tss[0], vol = None, rho = None, mult = 1/wgts[0], normalized_mult = 1, cor = None, vols = 1)            
     cols = [tuple(ts.columns) for ts in tss if is_df(ts) and ts.shape[1] > 1]
     if len(cols):
         assert len(set(cols)) == 1
         cols = list(cols[0])
-        res = Dict(dictable([ewmcombine(_col(tss, i), _col(wgts, i), n = n, full = full, join = join, method = method) for i in range(len(cols))]))
+        res = Dict(dictable([ewmcombine(_col(tss, i), _col(wgts, i), n = n, corr = corr, join = join, method = method) for i in range(len(cols))]))
         res = res.do(try_back(lambda v: df_concat(v, cols)))
         return res        
     if is_nums(wgts):
@@ -163,13 +174,13 @@ def ewmcombine(tss, wgts, n = 1024, vol_days = None, full = False, join = 'oj', 
     if len(tss) == 1:
         return Dict(data = tss[0], vol = None, rho = None, mult = 1/wgts[0], normalized_mult = 1, cor = None, vols = 1)            
     idx = a.index
-    res = _ewmcombine(a.values, w, n = n, vol_days = vol_days, full = full)
+    res = _ewmcombine(a.values, w, n = n, vol_days = vol_days, corr = corr)
     res = Dict({k : (pd.Series(v, idx) if len(v.shape) == 1 else [pd.Series(v[:,i], idx) for i in range(v.shape[1])]) if isinstance(v, np.ndarray) and v.shape[0] == len(idx) else v for k, v in res.items()})
     return res
 
 ewmcombine.output = ['data', 'vol', 'rho', 'mult', 'normalized_mult',  'cor', 'vols']
 
-def ewmcombined(tss, wgts, n = 1024, vol_days = None, full = False, join = 'oj', method = None):
+def ewmcombined(tss, wgts, n = 128, vol_days = None, corr = False, join = 'oj', method = None):
     """
     We expect tss and wgts to be provided as lists at the moment
 
@@ -177,16 +188,19 @@ def ewmcombined(tss, wgts, n = 1024, vol_days = None, full = False, join = 'oj',
     ----------
     tss : list of timeseries
         the data we want to combine into a single signal
-    wgts : list of weights, either floats or timeseries
+    wgts : list/dataframe of weights, either floats or timeseries
         
-    n : TYPE, optional
-        DESCRIPTION. The default is 1024.
-    full : TYPE, optional
-        DESCRIPTION. The default is False.
-    join : TYPE, optional
-        DESCRIPTION. The default is 'oj'.
+    n : int, optional
+        Length of data for correlation calculation. 
+    corr : a 3-d numpy matrix. optional
+        The output from ewmcorr. If provided, a full calculation of correlation is used
+    vol_days:
+        The input assumes that tss are broadly N(0,1) if this is false, the correlation calculation will be off. 
+        You can set vol_days and we will normalize each tss on the fly. If so, the normalized data will be available in vols output
+    join : str, optional
+        how we join the tss to a single frame. The default is 'oj' for outer join.
     method : TYPE, optional
-        DESCRIPTION. The default is None.
+        how we fill nans when we join the tss to a single frame. The default is None .
 
     Returns
     -------
@@ -194,6 +208,6 @@ def ewmcombined(tss, wgts, n = 1024, vol_days = None, full = False, join = 'oj',
         DESCRIPTION.
 
     """
-    return ewmcombine(tss, wgts, n = n, full = full, join = join, method = method)['data']
+    return ewmcombine(tss, wgts, n = n, corr = corr, join = join, method = method)['data']
 
     
