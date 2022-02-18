@@ -1,7 +1,5 @@
 from pyg_timeseries._rolling import _rolling_window
 from pyg_timeseries._decorators import first_, _data_state
-import bottleneck as bn
-
 
 __all__ = ['rolling_median', 'rolling_median_', 'expanding_median']
 
@@ -61,6 +59,7 @@ def rolling_median(a, n, axis = 0, data = None, state = None):
     >>> assert eq(rolling_median([a,a**2],10), [rolling_median(a,10), rolling_median(a**2,10)])
 
     """
+    import bottleneck as bn
     state = state or dict(vec = None)
     return first_(_rolling_window(a,n,n, func = bn.move_median, axis = axis, **state))
 
@@ -69,6 +68,7 @@ def rolling_median_(a, n, axis = 0, data = None, instate = None):
     Equivalent to rolling_median(a) but returns also the state. 
     For full documentation, look at rolling_median.__doc__    
     """
+    import bottleneck as bn
     state = instate or dict(vec = None)
     return _data_state(['data','vec'],_rolling_window(a, window = n, min_count = n, func = bn.move_median, axis = axis, **state))
 

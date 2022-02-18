@@ -1,5 +1,4 @@
 from pyg_timeseries._rolling import _vec, _rolling_window
-import bottleneck as bn
 from pyg_base import Dict
 from pyg_timeseries._decorators import first_, _data_state
 
@@ -49,6 +48,7 @@ def rolling_rank(a, n, axis = 0, data = None, state = None):
     >>> assert eq(np.concatenate([old.data,new]), rolling_rank(a, 10))
 
     """
+    import bottleneck as bn
     state = state or {}
     return first_(_rolling_window(a,n,n, func = bn.move_rank, axis = axis, **state))
 
@@ -57,6 +57,7 @@ def rolling_rank_(a, n, axis = 0, data = None, instate = None):
     Equivalent to rolling_rank(a) but returns also the state variables.
     For full documentation, look at rolling_rank.__doc__    
     """
+    import bottleneck as bn
     state = instate or {}
     return _data_state(['data','vec'],_rolling_window(a,n,n,func = bn.move_rank, axis = axis, **state))
 
@@ -93,4 +94,5 @@ def expanding_rank(a, axis = 0):
     
 
     """
+    import bottleneck as bn
     return first_(_rolling_window(a,0,1, vec = None, func = bn.move_rank, axis = axis))

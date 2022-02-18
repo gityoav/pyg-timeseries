@@ -1,5 +1,4 @@
 from pyg_timeseries._rolling import _rolling_window
-import bottleneck as bn
 from pyg_base import pd2np, loop_all
 from pyg_timeseries._decorators import first_, compiled, _data_state
 import numpy as np
@@ -62,6 +61,7 @@ def rolling_min(a, n, axis = 0, data = None, state = None):
     >>> assert eq(rolling_min([a,a**2],10), [rolling_min(a,10), rolling_min(a**2,10)])
 
     """
+    import bottleneck as bn
     state = state or {}
     return first_(_rolling_window(a,n,n, func = bn.move_min, axis = axis, **state))
 
@@ -70,6 +70,7 @@ def rolling_min_(a, n, vec = None, axis = 0, data = None, instate = None):
     Equivalent to rolling_min(a) but returns also the state. 
     For full documentation, look at rolling_min.__doc__    
     """
+    import bottleneck as bn
     state = instate or {}
     return _data_state(['data','vec'],_rolling_window(a,n,n, func = bn.move_min, axis = axis, **state))
 

@@ -1,5 +1,4 @@
 from pyg_timeseries._rolling import _rolling_window
-import bottleneck as bn
 from pyg_base import pd2np, loop_all
 from pyg_timeseries._decorators import first_, compiled, _data_state
 import numpy as np
@@ -62,6 +61,7 @@ def rolling_max(a, n, axis = 0, data = None, state = None):
     >>> assert eq(rolling_max([a,a**2],10), [rolling_max(a,10), rolling_max(a**2,10)])
 
     """
+    import bottleneck as bn
     state = state or dict(vec = None) 
     return first_(_rolling_window(a, window = n, min_count = n, func = bn.move_max, axis = axis, **state))
 
@@ -70,6 +70,7 @@ def rolling_max_(a, n, axis = 0, data = None, instate = None):
     Equivalent to rolling_max(a) but returns also the state. 
     For full documentation, look at rolling_max.__doc__    
     """
+    import bottleneck as bn
     state = instate or dict(vec = None) 
     return _data_state(['data','vec'],_rolling_window(a, window = n, min_count = n, func = bn.move_max, **state))
 
