@@ -11,7 +11,7 @@ from pyg_timeseries._expanding import cumsum, cumprod, cumsum_, cumprod_, \
                 expanding_mean, expanding_sum, expanding_rms, expanding_std, expanding_skew, \
                 expanding_mean_, expanding_sum_, expanding_rms_, expanding_std_, expanding_skew_
 from pyg_timeseries._ts import ts_std, ts_sum, ts_mean, ts_skew, ts_count, ts_min, ts_max, ts_rms, ts_median, ts_cor, \
-                                            ts_std_, ts_sum_, ts_mean_, ts_skew_, ts_count_, ts_min_, ts_max_, ts_rms_, ts_cor_
+                                            ts_interval, ts_std_, ts_sum_, ts_mean_, ts_skew_, ts_count_, ts_min_, ts_max_, ts_rms_, ts_cor_
                                             
 from pyg_timeseries._ewmxo import ewmxo, ewmxo_, ou_factor
 from pyg_timeseries._xrank import xrank

@@ -1,8 +1,10 @@
 import numpy as np
+import pandas as pd
 from pyg_timeseries._math import stdev_calculation, skew_calculation, cor_calculation
 from pyg_timeseries._decorators import compiled, first_, _data_state
 from pyg_timeseries._rolling import _vec
-from pyg_base import pd2np, loop_all, is_num, is_nums, as_list
+from pyg_base import pd2np, loop_all, is_num, is_nums, as_list, is_ts, is_pd, logger
+
 
 __all__ = ['ts_std', 'ts_mean', 'ts_skew', 'ts_count', 'ts_min', 'ts_max', 'ts_rms', 'ts_median',  'ts_sum',
            'ts_std_', 'ts_mean_', 'ts_skew_', 'ts_count_', 'ts_min_', 'ts_max_', 'ts_rms_', 'ts_sum_']
@@ -401,6 +403,7 @@ def _ts_rms(a, vec = None):
     return np.sqrt(vec[2]/vec[0]), vec
     
 
+
 def ts_rms(a, axis = 0, data = None, state = None):
     """
     ts_rms(a) is equivalent to (a**2).mean()**0.5
@@ -537,3 +540,35 @@ ts_std_.output = ['data', 'state']
 ts_skew_.output = ['data', 'state']
 
 
+def ts_interval(ts, min_freq = 0.5):
+    """
+    returns the most common time difference in the timeseries
+
+    :Example:
+    ----------
+    >>> ts = pd.Series(range(100), drange(-200,0,'1b')[:100])
+    >>> assert ts_interval(ts) == datetime.timedelta(1)
+
+    >>> ts = pd.Series(range(100), drange(-1,0,'5n')[:100])
+    >>> assert ts_interval(ts) ==  datetime.timedelta(minutes = 5)
+    
+    >>> ts = pd.Series(range(10000), range(10000))
+    >>> ts = ts[ts % 2 != 0]
+    >>> ts = ts[ts % 3 != 0]
+    >>> ts = ts[ts % 5 != 0]
+    >>> assert ts_interval(ts) == 4
+    
+    
+    """
+    if len(ts)<2:
+        return None
+    v = ts.index if is_pd(ts) else ts
+    intervals = pd.Series(v, v).diff().iloc[1:]
+    res = intervals.mode()[0]
+    freq = len(intervals[intervals.values==res]) / len(intervals)
+    if freq>=min_freq:
+        return res
+    else: 
+        logger.warning('timeseries is irregular, with mode frequency less than %1.2f. returning median interval instead'%freq)
+        return intervals.median()
+    
