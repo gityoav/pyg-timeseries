@@ -15,6 +15,7 @@ downloads/
 eggs/
 .eggs/
 .pylint.d/
+.idea/
 lib/
 lib64/
 parts/
