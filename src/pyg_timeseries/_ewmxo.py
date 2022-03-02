@@ -57,7 +57,7 @@ def ou_factor(fast, slow):
     return (F2/(1-F2) + S2/(1-S2) - 2*F*S/(1-F*S)) ** 0.5
 
 
-def ewmxo_(rtn, fast, slow, vol = None, instate = None):
+def ewmxo_(rtn, fast, slow, vol = None, time = None, instate = None):
     """
     This is the normalized crossover function
 
@@ -89,9 +89,9 @@ def ewmxo_(rtn, fast, slow, vol = None, instate = None):
     """
     state = Dict(fast = {}, slow = {}, vol = {}, cumsum = {}) if instate is None else instate
     ts = cumsum_(rtn, instate = state.get('cumsum'))
-    fast_ewma_ = ewma_(ts.data, fast, instate = state.get('fast'))
-    slow_ewma_ = ewma_(ts.data, slow, instate = state.get('slow'))
-    vol_ = ewmstd_(rtn, vol, instate = state.get('vol')) if is_num(vol) else vol
+    fast_ewma_ = ewma_(ts.data, fast, time = time, instate = state.get('fast'))
+    slow_ewma_ = ewma_(ts.data, slow, time = time, instate = state.get('slow'))
+    vol_ = ewmstd_(rtn, vol, time = time, instate = state.get('vol')) if is_num(vol) else vol
     signal = sub_(fast_ewma_.data, slow_ewma_.data)
     normalized = div_(signal, v2na(vol_.data) * ou_factor(fast, slow))
     return Dict(data = normalized, state = Dict(fast = fast_ewma_.state, 
@@ -101,7 +101,7 @@ def ewmxo_(rtn, fast, slow, vol = None, instate = None):
 ewmxo_.output = ['data', 'state']
 
 
-def ewmxo(rtn, fast, slow, vol = None, instate = None):
+def ewmxo(rtn, fast, slow, vol = None, time  = None, instate = None):
     """
     This is the normalized crossover function
 
