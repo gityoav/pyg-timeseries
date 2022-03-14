@@ -11,14 +11,24 @@ __all__ = ['ffill', 'bfill', 'fnna', 'na2v', 'v2na', 'diff', 'shift', 'ratio', '
 ## parameters
 ##
 ###############
-    
+
+
 @loop(list, dict)
-def _vec(vec, n, value = np.nan):
-    if vec is None:
-        vec = np.full(abs(n), value)
-    elif is_num(vec):
-        vec = np.array([vec])
-    return vec.copy()
+def _vec(a, vec, n, value = np.nan, axis = 0):
+    if len(a.shape)==2:
+        shape = a.shape[1] if axis==0 else a.shape[0]
+        if vec is None:
+            return [np.full(abs(n), value)]*shape
+        elif is_num(vec):
+            return [np.array([vec])]*shape
+        else:
+            return vec.copy()
+    else:        
+        if vec is None:
+            return np.full(abs(n), value)
+        elif is_num(vec):
+            return np.array([vec])
+        return vec.copy()
 
 @loop_all
 @pd2np
@@ -169,8 +179,8 @@ def _bfill(a, limit = -1):
 
 @loop_all
 @pd2np
-def _rolling_window(a, window, min_count, func, vec = None):
-    vec = _vec(vec,0)
+def _rolling_window(a, window, min_count, func, vec = None, axis = 0):
+    vec = _vec(a,vec,0,axis=axis)
     mask = ~np.isnan(a)
     na = a[mask]
     n = len(na)
@@ -605,7 +615,7 @@ def diff(a, n=1, axis = 0, data = None, state = None):
     if n == 0:
         return a - a
     state = state or Dict(vec = None, i = 0)
-    state.vec = _vec(state.vec, n)
+    state.vec = _vec(a,state.vec, n, axis=axis)
     return first_(_diff1(a, vec = state.vec, axis = axis) if n == 1 else _diff(a, n, axis = axis, **state))
 
 def diff_(a, n=1, axis = 0, data = None, instate = None):
@@ -617,7 +627,7 @@ def diff_(a, n=1, axis = 0, data = None, instate = None):
     if n == 0:
         return Dict(data = a - a, state = instate)
     state = instate or Dict(vec = None, i = 0) 
-    state.vec = _vec(state['vec'], n)
+    state.vec = _vec(a, state['vec'], n, axis=axis)
     return _data_state(['data', 'vec', 'i'], _diff1(a, state.vec, axis = axis) if n == 1 else _diff(a, n, axis = axis, **state))
 
 diff_.output = ['data', 'state']
@@ -666,7 +676,7 @@ def shift(a, n=1, axis = 0, data = None, state = None):
     if n == 0:
         return a
     state = state or Dict(vec = None, i = 0,)
-    state.vec = _vec(state.vec, n)
+    state.vec = _vec(a, state.vec, n, axis=axis)
     return first_(_shift1(a, state.vec, axis = axis) if n == 1 else _shift(a, n, axis = axis, **state))
 
 def shift_(a, n=1, axis = 0, instate = None):
@@ -677,12 +687,12 @@ def shift_(a, n=1, axis = 0, instate = None):
     if n == 0:
         return Dict(data = a, state = instate)
     state = instate or Dict(vec = None, i = 0,)
-    state.vec = _vec(state.vec, n)
+    state.vec = _vec(a, state.vec, n, axis=axis)
     return _data_state(['data', 'vec', 'i'], _shift1(a, vec = state.vec, axis = axis) if n == 1 else _shift(a, n, axis = axis, **state))
 
 shift_.output = ['data', 'state']
         
-def ratio(a, n=1, data = None, state = None):
+def ratio(a, n=1, data = None, state = None, axis = 0):
     """
     Equivalent to a.diff() but in log-space..
     
@@ -706,12 +716,12 @@ def ratio(a, n=1, data = None, state = None):
     >>> assert eq(ratio(a,2), pd.Series([np.nan, np.nan, 3, 2, 5/3], drange(-4)))
     """
     state = state or Dict(vec = None, i = 0)
-    state.vec = _vec(state.vec, n)
-    return first_(_ratio(a, n, **state))
+    state.vec = _vec(a, state.vec, n, axis=axis)
+    return first_(_ratio(a, n, axis = axis, **state))
 
-def ratio_(a, n=1, data = None, instate = None):
+def ratio_(a, n=1, axis = 0, data = None, instate = None):
     state = instate or Dict(vec = None, i = 0) 
-    state.vec = _vec(state.vec, n)
+    state.vec = _vec(a, state.vec, n, axis=axis)
     return _data_state(['data', 'vec', 'i'], _ratio(a, n, **state))
 
 ratio_.output = ['data', 'state']
@@ -787,7 +797,7 @@ def rolling_mean(a, n, time = None, axis = 0, data = None, state = None):
 
     """
     state = state or Dict(t0 = 0, t1 = 0., vec = None, i = 0, t = np.nan)
-    state.vec = _vec(state.vec, n, 0.)
+    state.vec = _vec(a, state.vec, n, 0., axis=axis)
     return first_(_trolling_mean(a, n, time = time, denom = n, axis = axis, **state))
 
 def rolling_rms(a, n, time = None, axis = 0, data = None, state = None):
@@ -860,7 +870,7 @@ def rolling_rms(a, n, time = None, axis = 0, data = None, state = None):
 
     """
     state = state or Dict(t0 = 0, t2 = 0., vec = None, i = 0, t = np.nan)
-    state.vec = _vec(state.vec, n, 0.)
+    state.vec = _vec(a, state.vec, n, 0., axis=axis)
     return first_(_trolling_rms(a, n, time = time, denom = n, axis = axis, **state))
 
 def rolling_sum(a, n, time = None, axis = 0, data = None, state = None):
@@ -931,7 +941,7 @@ def rolling_sum(a, n, time = None, axis = 0, data = None, state = None):
     ## The sum is then calculated from last observation in day 0 (i.e. 2) and then 3. and then with 4. since these are again, from same day
     """
     state = state or Dict(t0 = 0, t1 = 0., vec = None, i = 0, t = np.nan)
-    state.vec = _vec(state.vec, n, 0.)
+    state.vec = _vec(a, state.vec, n, 0., axis=axis)
     return first_(_trolling_mean(a, n, time = time, denom = 1, axis = axis, **state))
 
 def rolling_std(a, n, time = None, axis = 0, data = None, state = None):
@@ -1002,7 +1012,7 @@ def rolling_std(a, n, time = None, axis = 0, data = None, state = None):
     ## The sum is then calculated from last observation in day 0 (i.e. 2) and then 3. and then with 4. since these are again, from same day
     """    
     state = state or Dict(t0 = 0, t1 = 0, t2 = 0., vec = None, i = 0, t = np.nan)
-    state.vec = _vec(state.vec, n, 0.)
+    state.vec = _vec(a, state.vec, n, 0., axis=axis)
     return first_(_trolling_std(a, n, time = time, denom = n, axis = axis, **state))
 
 def rolling_skew(a, n, bias = False, time = None, axis = 0, data = None, state = None):
@@ -1065,7 +1075,7 @@ def rolling_skew(a, n, bias = False, time = None, axis = 0, data = None, state =
     >>> assert eq(rolling_skew([a,a**2],10), [rolling_skew(a,10), rolling_skew(a**2,10)])
     """
     state = state or Dict(t0 = 0, t1 = 0, t2 = 0., t3 = 0, vec = None, i = 0, t = np.nan)
-    state.vec = _vec(state.vec, n, 0.)
+    state.vec = _vec(a, state.vec, n, 0., axis=axis)
     return first_(_trolling_skew(a, n, time = time, bias = bias, denom = n, axis = axis, **state))
 
 
@@ -1075,7 +1085,7 @@ def rolling_mean_(a, n, time = None, axis = 0, data = None, instate = None):
     For full documentation, look at rolling_mean.__doc__
     """
     state = instate or Dict(t0 = 0, t1 = 0., vec = None, i = 0, t = np.nan)
-    state.vec = _vec(state.vec, n, 0.)
+    state.vec = _vec(a, state.vec, n, 0., axis=axis)
     return _data_state(['data','t0','t1', 'vec','i', 't'],_trolling_mean(a, n, time = time, denom = n, axis = axis, **state))
 
 rolling_mean_.output = ['data','state']
@@ -1086,7 +1096,7 @@ def rolling_rms_(a, n, time = None, axis = 0, data = None, instate = None):
     For full documentation, look at rolling_rms.__doc__
     """
     state = instate or Dict(t0 = 0, t2 = 0., vec = None, i = 0, t = np.nan)
-    state.vec = _vec(state.vec, n, 0.)
+    state.vec = _vec(a, state.vec, n, 0., axis=axis)
     return _data_state(['data','t0','t2', 'vec','i', 't'],_trolling_rms(a, n, time = time, denom = n, axis = axis, **state))
 
 rolling_rms_.output = ['data','state']
@@ -1097,7 +1107,7 @@ def rolling_sum_(a, n, time = None, axis = 0, data = None, instate = None):
     For full documentation, look at rolling_sum.__doc__
     """
     state = instate or Dict(t0 = 0, t1 = 0., vec = None, i = 0, t = np.nan)
-    state.vec = _vec(state.vec, n, 0.)
+    state.vec = _vec(a, state.vec, n, 0., axis=axis)
     return _data_state(['data','t0','t1', 'vec','i', 't'], _trolling_mean(a, n, denom = 1, axis = axis, **state))
 
 rolling_sum_.output = ['data','state']
@@ -1108,7 +1118,7 @@ def rolling_std_(a, n, time = None, axis = 0, data = None, instate = None):
     For full documentation, look at rolling_std.__doc__
     """
     state = instate or Dict(t0 = 0, t1 = 0, t2 = 0., vec = None, i = 0, t = np.nan)
-    state.vec = _vec(state.vec, n, 0.)
+    state.vec = _vec(a, state.vec, n, 0., axis=axis)
     return _data_state(['data','t0', 't1', 't2', 'vec', 'i', 't'],_trolling_std(a, n, time = time, denom = n, axis = axis, **state))
 
 
@@ -1120,7 +1130,7 @@ def rolling_skew_(a, n, time = None, bias = False, axis = 0, data = None, instat
     For full documentation, look at rolling_skew.__doc__
     """
     state = instate or Dict(t0 = 0, t1 = 0, t2 = 0., t3 = 0, vec = None, i = 0, t = np.nan)
-    state.vec = _vec(state.vec, n, 0.)
+    state.vec = _vec(a, state.vec, n, 0., axis=axis)
     return _data_state(['data','t0', 't1', 't2', 't3', 'vec','i', 't'], _trolling_skew(a, n, time = time, bias = bias, denom = n, axis = axis, **state))
 
 rolling_skew_.output = ['data','state']

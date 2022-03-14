@@ -130,5 +130,5 @@ def ewmxo(rtn, fast, slow, vol = None, time  = None, instate = None):
     >>> rtn = pd.Series(np.random.normal(0,1,10000),drange(-9999,0))
     >>> fast = 64; slow = 192; vol = 32; instate = None    
     """
-    return ewmxo_(rtn, fast, slow, vol, instate).data
+    return ewmxo_(rtn, fast, slow, vol, time = time, instate = instate).data
 
