@@ -1,5 +1,5 @@
 from pyg_base import Dict, is_num, sub_, div_
-from pyg_timeseries._ewm import ewma_, ewmstd_
+from pyg_timeseries._ewm import ewma_, ewmstd_, ewmvol_
 from pyg_timeseries._rolling import v2na 
 from pyg_timeseries._expanding import cumsum_
 
@@ -101,6 +101,49 @@ def ewmxo_(rtn, fast, slow, vol = None, time = None, instate = None):
 ewmxo_.output = ['data', 'state']
 
 
+def ewmacd_(ts, fast, slow, vol = None, time = None, instate = None):
+    """
+    This is the normalized crossover function
+
+    >>> res = (ewma(rtn, fast) - ewma(rtn, slow)) / (ewmstd(rtn, vol) * ou_factor(fast, slow))
+    
+    The OU factor normalizes the result so that rms(res) is approximately 1
+
+    Parameters
+    ----------
+    rtn:  timeseries
+        The returns of a financial process
+    
+    fast : int/frac
+        number of days. can also be 1/(1+days) if presented as a fraction
+
+    slow : int/frc
+        number of days. can also be 1/(1+days) if presented as a fraction
+
+    vol: int/frc
+        number of days. used for calculating the volatility horizon
+        
+    
+    :Example:
+    ---------
+    >>> import numpy as np; import pandas as pd; from pyg import * 
+    >>> rtn = pd.Series(np.random.normal(0,1,10000),drange(-9999,0))
+    >>> fast = 64; slow = 192; vol = 32; instate = None
+    
+    """
+    state = Dict(fast = {}, slow = {}, vol = {}, cumsum = {}) if instate is None else instate
+    fast_ewma_ = ewma_(ts, fast, time = time, instate = state.get('fast'))
+    slow_ewma_ = ewma_(ts, slow, time = time, instate = state.get('slow'))
+    vol_ = ewmvol_(ts, vol, time = time, instate = state.get('vol')) if is_num(vol) else vol
+    signal = sub_(fast_ewma_.data, slow_ewma_.data)
+    normalized = div_(signal, v2na(vol_.data) * ou_factor(fast, slow))
+    return Dict(data = normalized, state = Dict(fast = fast_ewma_.state, 
+                                                slow = slow_ewma_.state, 
+                                                vol = vol_.state))
+
+ewmacd_.output = ['data', 'state']
+
+
 def ewmxo(rtn, fast, slow, vol = None, time  = None, instate = None):
     """
     This is the normalized crossover function
@@ -131,4 +174,36 @@ def ewmxo(rtn, fast, slow, vol = None, time  = None, instate = None):
     >>> fast = 64; slow = 192; vol = 32; instate = None    
     """
     return ewmxo_(rtn, fast, slow, vol, time = time, instate = instate).data
+
+
+def ewmacd(ts, fast, slow, vol = None, time  = None, instate = None):
+    """
+    This is the normalized crossover function with price inpits
+
+    >>> res = (ewma(rtn, fast) - ewma(rtn, slow)) / (ewmstd(rtn, vol) * ou_factor(fast, slow))
+    
+    The OU factor normalizes the result so that rms(res) is approximately 1
+
+    Parameters
+    ----------
+    ts:  timeseries
+        The price of a financial process
+    
+    fast : int/frac
+        number of days. can also be 1/(1+days) if presented as a fraction
+
+    slow : int/frc
+        number of days. can also be 1/(1+days) if presented as a fraction
+
+    vol: int/frc
+        number of days. used for calculating the volatility horizon
+        
+    
+    :Example:
+    ---------
+    >>> import numpy as np; import pandas as pd; from pyg import * 
+    >>> ts = pd.Series(np.random.normal(0,1,10000),drange(-9999,0)).cumsum()
+    >>> fast = 64; slow = 192; vol = 32; instate = None    
+    """
+    return ewmacd_(ts, fast, slow, vol, time = time, instate = instate).data
 
