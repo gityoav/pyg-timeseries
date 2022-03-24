@@ -1,6 +1,6 @@
 from pyg_base import Dict, is_num, sub_, div_
-from pyg_timeseries._ewm import ewma_, ewmstd_, ewmvol_
-from pyg_timeseries._rolling import v2na 
+from pyg_timeseries._ewm import ewma_, ewmstd_, ewmrms_
+from pyg_timeseries._rolling import v2na, diff_
 from pyg_timeseries._expanding import cumsum_
 
 def _frac(days):
@@ -101,7 +101,7 @@ def ewmxo_(rtn, fast, slow, vol = None, time = None, instate = None):
 ewmxo_.output = ['data', 'state']
 
 
-def ewmacd_(ts, fast, slow, vol = None, time = None, instate = None):
+def ewmacd_(ts, fast, slow, vol = None, time = None, instate = None, rms = True):
     """
     This is the normalized crossover function
 
@@ -131,20 +131,56 @@ def ewmacd_(ts, fast, slow, vol = None, time = None, instate = None):
     >>> fast = 64; slow = 192; vol = 32; instate = None
     
     """
-    state = Dict(fast = {}, slow = {}, vol = {}, cumsum = {}) if instate is None else instate
+    state = Dict(fast = {}, slow = {}, vol = {}, diff = {}) if instate is None else instate
     fast_ewma_ = ewma_(ts, fast, time = time, instate = state.get('fast'))
     slow_ewma_ = ewma_(ts, slow, time = time, instate = state.get('slow'))
-    vol_ = ewmvol_(ts, vol, time = time, instate = state.get('vol')) if is_num(vol) else vol
-    signal = sub_(fast_ewma_.data, slow_ewma_.data)
+    rtn_ = diff_(ts, 1, time = time, instate = state.get('diff'))
+    vol_ = (ewmrms_ if rms else ewmstd_)(rtn_.data, vol, time = time, instate = state.get('vol')) if is_num(vol) else vol
+    signal = fast_ewma_.data - slow_ewma_.data
     normalized = div_(signal, v2na(vol_.data) * ou_factor(fast, slow))
     return Dict(data = normalized, state = Dict(fast = fast_ewma_.state, 
                                                 slow = slow_ewma_.state, 
-                                                vol = vol_.state))
+                                                vol = vol_.state,
+                                                diff = rtn_.state))
 
 ewmacd_.output = ['data', 'state']
 
 
-def ewmxo(rtn, fast, slow, vol = None, time  = None, instate = None):
+def ewmvol_(a, n, time = None, instate = None, rms = True):
+    """
+    Just like ewmstd / ewmrms but calculated of prices rather than returns.
+    It handles time better by delegating the time calculating for the diff as well
+    
+    :Example:
+    ---------
+    >>> import numpy as np; import pandas as pd; from pyg import * 
+    >>> rtn = pd.Series(np.random.normal(0,1,10000),drange(-9999,0))
+    """
+    state = Dict(vol = {}, diff = {}) if instate is None else instate
+    rtn_ = diff_(a, 1, time = time, instate = state.get('diff'))
+    vol_ = (ewmrms_ if rms else ewmstd_)(rtn_.data, n, time = time, instate = state.get('vol'))
+    return Dict(data = vol_.data, state = Dict(vol = vol_.state, 
+                                                diff = rtn_.state))
+
+ewmvol_.output = ['data', 'state']
+
+
+def ewmvol(a, n, time  = None, state = None, rms = True):
+    """
+    calculate ewmstd/ewmrms based of a price
+
+    :Example:
+    ---------
+    >>> import numpy as np; import pandas as pd; from pyg import * 
+    >>> rtn = pd.Series(np.random.normal(0,1,10000),drange(-9999,0))
+    >>> a = cumsum(rtn)
+    >>> rtn = diff(a)
+    >>> assert abs(ewmrms(rtn, 10)-ewmvol(a, 10)).max() < 1e-10
+    """
+    return ewmvol_(a = a, n = n, time = time, instate = state, rms = rms).data
+
+
+def ewmxo(rtn, fast, slow, vol = None, time  = None, state = None):
     """
     This is the normalized crossover function
 
@@ -173,10 +209,10 @@ def ewmxo(rtn, fast, slow, vol = None, time  = None, instate = None):
     >>> rtn = pd.Series(np.random.normal(0,1,10000),drange(-9999,0))
     >>> fast = 64; slow = 192; vol = 32; instate = None    
     """
-    return ewmxo_(rtn, fast, slow, vol, time = time, instate = instate).data
+    return ewmxo_(rtn, fast, slow, vol, time = time, instate = state).data
 
 
-def ewmacd(ts, fast, slow, vol = None, time  = None, instate = None):
+def ewmacd(ts, fast, slow, vol = None, time  = None, state = None):
     """
     This is the normalized crossover function with price inpits
 
@@ -205,5 +241,5 @@ def ewmacd(ts, fast, slow, vol = None, time  = None, instate = None):
     >>> ts = pd.Series(np.random.normal(0,1,10000),drange(-9999,0)).cumsum()
     >>> fast = 64; slow = 192; vol = 32; instate = None    
     """
-    return ewmacd_(ts, fast, slow, vol, time = time, instate = instate).data
+    return ewmacd_(ts, fast, slow, vol, time = time, instate = state).data
 

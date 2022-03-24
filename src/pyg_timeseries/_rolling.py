@@ -204,53 +204,95 @@ def _rolling_window(a, window, min_count, func, vec = None, axis = 0):
 @loop_all
 @pd2np
 @compiled
-def _diff(a, n, vec, i):
+def _diff(a, n, vec, i, time, t = np.nan):
+    """
+    a = cumsum(np.array(range(10))) * 1.
+    n = 1
+    vec = np.array([np.nan])
+    i = 0; t = np.nan
+    time = np.array([0,0,1,1,1,2,2,2,2,3])
+
+    """
     vec = vec.copy()
     _n = abs(n)
     s = (0,a.shape[0],1) if n>0 else (a.shape[0]-1,-1,-1)
     res = np.empty_like(a)
+    prev = vec[i]
     for j in range(*s):
         if np.isnan(a[j]):
             res[j] = np.nan
         else:
-            res[j] = a[j] - vec[i]
+            if not (time[j] == t):
+                i = (i+1) % _n
+                prev = vec[i]
+                # print('moving forward in time, new previous is', prev)
+            t = time[j]
+            res[j] = a[j] - prev
             vec[i] = a[j]
-            i = (i+1) % _n
-    return res, vec, i
+            # print('prev is ', prev, 'time is ', t, 'res is', a[j], '-', prev, '=', res[j])
+    return res, vec, i, t
 
 @loop_all
 @pd2np
 @compiled
-def _diff1(a, vec):
+def _diff1(a, vec, time, i = 0, t = np.nan):
     vec = vec.copy()
-    v = vec[0]
+    s = (0,a.shape[0],1)
     res = np.empty_like(a)
-    for j in range(a.shape[0]):
+    prev = vec[i]
+    for j in range(*s):
         if np.isnan(a[j]):
             res[j] = np.nan
         else:
-            res[j] = a[j] - v
-            v = a[j]
-    vec[0] = v
-    return res, vec, 0
+            if not (time[j] == t):
+                prev = vec[i]
+            t = time[j]
+            res[j] = a[j] - prev
+            vec[i] = a[j]
+    return res, vec, i, t
+
+
+@loop_all
+def _tdiff(a, n, vec, i, time = None, t = None):
+    time = clock(a, time, t)
+    t = 0 if t is None or np.isnan(t) else t
+    return _diff(a = a, n = n, vec = vec, i = i, time = time, t = t)
+
+
+@loop_all
+def _tdiff1(a, vec, i = 0, time = None, t = None):
+    time = clock(a, time, t)
+    t = 0 if t is None or np.isnan(t) else t
+    return _diff1(a = a, vec = vec, i = i, time = time, t = t)
 
 
 @loop_all
 @pd2np
 @compiled
-def _ratio(a, n, vec, i):
+def _ratio(a, n, vec, i, time, t = np.nan):
     vec = vec.copy()
     _n = abs(n)
     s = (0,a.shape[0],1) if n>0 else (a.shape[0]-1,-1,-1)
     res = np.empty_like(a)
+    prev = vec[i]
     for j in range(*s):
         if np.isnan(a[j]):
             res[j] = np.nan
         else:
-            res[j] = np.nan if vec[i] == 0 else a[j] / vec[i] 
+            if not (time[j] == t):
+                i = (i+1) % _n
+                prev = vec[i]
+            t = time[j]
+            res[j] = np.nan if prev == 0 else a[j] / prev 
             vec[i] = a[j]
-            i = (i+1) % _n
-    return res, vec, i
+    return res, vec, i, t
+
+@loop_all
+def _tratio(a, n, vec, i, time = None, t = None):
+    time = clock(a, time, t)
+    t = 0 if t is None or np.isnan(t) else t
+    return _ratio(a = a, n = n, vec = vec, i = i, time = time, t = t)
+
 
 @loop_all
 @pd2np
@@ -583,7 +625,7 @@ def init2v(a, n = 0, new = np.nan):
     return _init2v(a, n, new)
 
 
-def diff(a, n=1, axis = 0, data = None, state = None):
+def diff(a, n=1, time = None, axis = 0, data = None, state = None):
     """
     equivalent to a.diff(n) in pandas if there are no nans. If there are, we SKIP nans rather than propagate them.
 
@@ -614,11 +656,12 @@ def diff(a, n=1, axis = 0, data = None, state = None):
     """
     if n == 0:
         return a - a
-    state = state or Dict(vec = None, i = 0)
+    state = state or Dict(vec = None, i = 0, t = np.nan)
     state.vec = _vec(a,state.vec, n, axis=axis)
-    return first_(_diff1(a, vec = state.vec, axis = axis) if n == 1 else _diff(a, n, axis = axis, **state))
+    return first_(_tdiff1(a, time = time, axis = axis, **state) if n == 1 
+                  else _tdiff(a, n = n, time = time, axis = axis, **state))
 
-def diff_(a, n=1, axis = 0, data = None, instate = None):
+def diff_(a, n=1, time = None, axis = 0, data = None, instate = None):
     """
     returns a forward filled array, up to n values forward. 
     Equivalent to diff(a,n) but returns the full state. See diff for full details
@@ -626,9 +669,11 @@ def diff_(a, n=1, axis = 0, data = None, instate = None):
     """
     if n == 0:
         return Dict(data = a - a, state = instate)
-    state = instate or Dict(vec = None, i = 0) 
+    state = instate or Dict(vec = None, i = 0, t = np.nan) 
     state.vec = _vec(a, state['vec'], n, axis=axis)
-    return _data_state(['data', 'vec', 'i'], _diff1(a, state.vec, axis = axis) if n == 1 else _diff(a, n, axis = axis, **state))
+    return _data_state(['data', 'vec', 'i', 't'], 
+                       _tdiff1(a, time = time, axis = axis, **state) if n == 1 
+                       else _tdiff(a, n=n, time = time, axis = axis, **state))
 
 diff_.output = ['data', 'state']
         
@@ -692,7 +737,7 @@ def shift_(a, n=1, axis = 0, instate = None):
 
 shift_.output = ['data', 'state']
         
-def ratio(a, n=1, data = None, state = None, axis = 0):
+def ratio(a, n=1, time = None, data = None, state = None, axis = 0):
     """
     Equivalent to a.diff() but in log-space..
     
@@ -715,14 +760,14 @@ def ratio(a, n=1, data = None, state = None, axis = 0):
     >>> assert eq(ratio(a), pd.Series([np.nan, 2, 1.5, 4/3,1.25], drange(-4)))
     >>> assert eq(ratio(a,2), pd.Series([np.nan, np.nan, 3, 2, 5/3], drange(-4)))
     """
-    state = state or Dict(vec = None, i = 0)
+    state = state or Dict(vec = None, i = 0, t = np.nan)
     state.vec = _vec(a, state.vec, n, axis=axis)
-    return first_(_ratio(a, n, axis = axis, **state))
+    return first_(_tratio(a, n, axis = axis, time = time, **state))
 
-def ratio_(a, n=1, axis = 0, data = None, instate = None):
-    state = instate or Dict(vec = None, i = 0) 
+def ratio_(a, n=1, time = None, axis = 0, data = None, instate = None):
+    state = instate or Dict(vec = None, i = 0, t = np.nan) 
     state.vec = _vec(a, state.vec, n, axis=axis)
-    return _data_state(['data', 'vec', 'i'], _ratio(a, n, **state))
+    return _data_state(['data', 'vec', 'i', 't'], _tratio(a, n, time = time, **state))
 
 ratio_.output = ['data', 'state']
 

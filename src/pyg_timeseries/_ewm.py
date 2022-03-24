@@ -164,61 +164,6 @@ def _ewmstd(a, n, time, t = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample =
 
 @pd2np
 @compiled
-def _ewmvol(a, n, time, t = np.nan, a0 = np.nan, a1 = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = 0.25, bias = False, calculator = stdev_calculation_ewm):
-    """
-    ewmvol calculates the volatility of PRICES, taking into account time. 
-    
-    rtn = np.random.normal(0,1, 100)
-    px = cumsum(rtn)
-    rtn = diff(px)
-    n = 10
-    a = px
-    time = np.nan * rtn
-    vol = _ewmvol(px, 10, time)[0]
-    std = _ewmstd(rtn, 10, time)[0]
-    assert eq(vol, std)
-
-    time  = np.arange(len(rtn))
-    vol = _ewmvol(px, 10, time)[0]
-    std = _ewmstd(rtn, 10, time)[0]
-    assert eq(vol, std)
-
-    time = np.array(sum([[i] * 10 for i in range(len(rtn)//10)], []))
-    vol = _ewmvol(px, 10, time)[0]
-    assert ts_max(vol) < 4.5 and ts_min(vol) > 2 ## should be around sqrt(10)
-
-    """
-    w = _w(n)
-    res = np.empty_like(a)
-    for i in range(a.shape[0]):
-        if np.isnan(a[i]):
-            res[i] = np.nan
-        else:
-            if time[i] == t:
-                if not np.isnan(a1):
-                    r = a[i] - a1
-                    r0 = a0 - a1
-                    t1 = t1 + (1-w) * (r - r0)
-                    t2 = t2 + (1-w) * (r**2 - r0**2)
-                a0 = a[i]
-            else:
-                a1 = a0 # the previous price on same timestamp becomes the reference price
-                if not np.isnan(a1):
-                    p = w if np.isnan(time[i] - t) else w**(time[i]-t)
-                    r = a[i] - a1
-                    t0 = t0 * p + (1-w)
-                    w2 = w2 * p**2 + (1-w)**2
-                    t1 = t1 * p + (1-w) * r
-                    t2 = t2 * p + (1-w) * r**2
-                    t = time[i]
-            a0 = a[i]
-            res[i] = calculator(t0, t1, t2, w2 = w2, min_sample = min_sample, bias = bias)
-    return res, t, t0, t1, t2, w2, a0, a1
-
-    
-
-@pd2np
-@compiled
 def _ewmcor(a, b, ba, n, time, t = np.nan, t0 = 0, a1 = 0, a2 = 0, b1 = 0, b2 = 0, ab = 0, w2 = 0, min_sample = 0.25, bias = False):
     """
     _ewmcor(a, b, ba, n, time, t)
@@ -593,13 +538,6 @@ def _ewmstdt(a, n, time = None, t = None, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sa
     return _ewmstd(a, n, time = time, t = t, t0 = t0, t1 = t1, t2 = t2, w2 = w2, min_sample=min_sample, bias = bias, calculator = calculator)
 
 @loop_all
-def _ewmvolt(a, n, time = None, t = None, t0 = 0, t1 = 0, t2 = 0, w2 = 0, a0 = np.nan, a1 = np.nan, min_sample = 0.25, bias = False, calculator = stdev_calculation_ewm):
-    time = clock(a, time, t)
-    t = 0 if t is None or np.isnan(t) else t    
-    return _ewmvol(a, n, time = time, t = t, t0 = t0, t1 = t1, t2 = t2, w2 = w2, a0 = a0, a1 = a1, min_sample=min_sample, bias = bias, calculator = calculator)
-
-
-@loop_all
 @presync
 def _ewmcort(a, b, n, time = None, t = None, t0 = 0, a1 = 0, a2 = 0, b1 = 0, b2 = 0, ab = 0, w2 = 0, min_sample = 0.25, bias = False):
     ba = b * a
@@ -946,25 +884,6 @@ def ewmstd(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None
     """
     state = state or {}
     return first_(_ewmstdt(a, n, time = time, min_sample=min_sample, bias = bias, axis=axis,  calculator = stdev_calculation_ewm, **state))
-
-
-def ewmvol_(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, instate = None):
-    """
-    Equivalent to ewmstd but returns a state parameter for instantiation of later calculations.
-    See ewmstd documentation for more details
-    """
-    state = instate or {}
-    return _data_state(['data', 't', 't0', 't1', 't2', 'w2', 'a0', 'a1'],_ewmvolt(a, n, time = time, min_sample=min_sample, axis=axis, calculator = stdev_calculation_ewm, **state))
-
-ewmvol_.output = ['data', 'state']
-
-def ewmvol(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, state = None):
-    """
-    ewmstd but operates on prices rather than returns and supports time better
-    
-    """
-    state = state or {}
-    return first_(_ewmvolt(a, n, time = time, min_sample=min_sample, bias = bias, axis=axis,  calculator = stdev_calculation_ewm, **state))
 
 
 def ewmvar_(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, instate = None):
