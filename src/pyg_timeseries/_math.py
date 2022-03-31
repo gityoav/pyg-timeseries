@@ -3,6 +3,16 @@ from pyg_timeseries._decorators import compiled
 
 
 @compiled
+def _w(n):
+    if n > 1:
+        return n/(n+1)
+    elif n < 1:
+        return 1. * n
+    else:
+        raise ValueError('n can either be days>1 or fraction 1-1/(n+1) but nothing else')        
+    
+
+@compiled
 def stdev_calculation(t0, t1, t2, default = np.nan):
     if t0 > 1:
         p = t0-1

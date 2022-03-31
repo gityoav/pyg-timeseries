@@ -1,5 +1,5 @@
 import numpy as np
-from pyg_timeseries._math import stdev_calculation, skew_calculation
+from pyg_timeseries._math import stdev_calculation, skew_calculation, _w
 from pyg_timeseries._decorators import compiled, first_, _data_state
 from pyg_base import pd2np, Dict, is_num, loop_all, loop, clock
 
@@ -168,6 +168,33 @@ def _bfill(a, limit = -1):
         else:
             n = limit
             prev = res[j]
+    return res
+
+
+@loop_all
+@pd2np
+@compiled
+def _ewfill(a, fwd_n, bwd_n = np.nan, prev = np.nan, nxt = np.nan, decay_target = 0.):
+    res = a.copy()
+    prev = decay_target if np.isnan(prev) else prev
+    nxt = decay_target if np.isnan(nxt) else nxt
+    fw = _w(fwd_n)
+    bw = fw if np.isnan(bwd_n) else _w(bwd_n)
+    f = b = 1.
+    for j in range(a.shape[0]): ## forward sweep
+        if np.isnan(a[j]):
+            f *= fw
+            res[j] = 0.5 * (prev * f  + (1 - f) * decay_target)
+        else:
+            f = 1.
+            prev = res[j]    
+    for j in range(a.shape[0] - 1,  -1, -1):
+        if np.isnan(a[j]):
+            b *= bw
+            res[j] += 0.5*(nxt * b  + (1 - b) * decay_target)
+        else:
+            b = 1.
+            nxt = res[j]
     return res
 
 
@@ -485,6 +512,35 @@ def fnnz(a, n=1, axis = 0):
     
     """
     return _fnnz(a, n, axis = axis)
+
+
+def ewfill(a, fwd_n, bwd_n = None, axis = 0, decay_target = 0.0):
+    """
+    returns a double-direction exponentially-weighted filled result.
+    
+    The idea is that we decay value to long term target (say 0). 
+    The weight we get from previous observation decays exponentiall (using fwd_n)
+    The weight we get from next observation decays exponentiall backwards (using bwd_n)
+    The remaining weight is assigned to long term decay_target
+    
+    :Parameters:
+    ------------
+    a : array/timeseries
+        array/timeseries
+    fwd_n: int/float, optional
+        speed of fwd filling decay weight
+    bwd_n: int/float, optional
+        speed of bwd_n filling decay weight
+    state: dict, optional
+        state parameters used to instantiate the internal calculations, based on history prior to 'a' provided. 
+
+    :Example:
+    ---------
+    >>> a = np.array([np.nan,np.nan,1,np.nan,np.nan,2,np.nan,np.nan,np.nan])
+    >>> fnna(a, n=-2)
+    """
+    bwd_n = bwd_n or fwd_n
+    return _ewfill(a, fwd_n = fwd_n, bwd_n = bwd_n, decay_target = decay_target)
 
 
 
