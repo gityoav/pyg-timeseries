@@ -17,3 +17,5 @@ from pyg_timeseries._ewmxo import ewmxo, ewmxo_, ou_factor, ewmacd, ewmacd_, ewm
 from pyg_timeseries._xrank import xrank
 from pyg_timeseries._ewmcombine import ewmcombine, ewmcombined
 from pyg_timeseries._pandas import fnna_like
+from pyg_timeseries._opt import least_squares
+from pyg_timeseries._iter import ts_iterate
