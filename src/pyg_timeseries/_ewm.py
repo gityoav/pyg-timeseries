@@ -1,26 +1,11 @@
 import numpy as np; import pandas as pd
-from pyg_timeseries._math import stdev_calculation_ewm, skew_calculation, cor_calculation_ewm, corr_calculation_ewm, LR_calculation_ewm, variance_calculation_ewm
+from pyg_timeseries._math import stdev_calculation_ewm, skew_calculation, cor_calculation_ewm, corr_calculation_ewm, LR_calculation_ewm, variance_calculation_ewm, _w
 from pyg_timeseries._decorators import compiled, first_, _data_state
 from pyg_base import pd2np, clock, loop_all, loop, is_pd, is_df, presync, df_concat
 
 __all__ = ['ewma', 'ewmstd', 'ewmvar', 'ewmskew', 'ewmrms',  'ewmcor',  'ewmcorr', 'ewmLR', 'ewmGLM',
            'ewma_', 'ewmstd_', 'ewmskew_', 'ewmrms_', 'ewmcor_', 'ewmvar_','ewmLR_', 'ewmGLM_',]
 
-############################################
-##
-## resolving parameters
-##
-###########################################
-
-@compiled
-def _w(n):
-    if n > 1:
-        return n/(n+1)
-    elif n < 1:
-        return 1. * n
-    else:
-        raise ValueError('n can either be days>1 or fraction 1-1/(n+1) but nothing else')        
-    
 
 ############################################
 ##
