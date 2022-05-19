@@ -493,6 +493,7 @@ def fnna(a, n=1, axis = 0):
     """
     return _fnna(a, n, axis = axis)
 
+
 def fnnz(a, n=1, axis = 0):
     """
     returns the index in a of the nth first non-nan and non-zero.
