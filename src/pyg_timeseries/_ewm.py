@@ -1,5 +1,5 @@
 import numpy as np; import pandas as pd
-from pyg_timeseries._math import stdev_calculation_ewm, skew_calculation, cor_calculation_ewm, corr_calculation_ewm, LR_calculation_ewm, variance_calculation_ewm, _w
+from pyg_timeseries._math import stdev_calculation_ewm, skew_calculation, cor_calculation_ewm, covariance_calculation, corr_calculation_ewm, LR_calculation_ewm, variance_calculation_ewm, _w
 from pyg_timeseries._decorators import compiled, first_, _data_state
 from pyg_base import pd2np, clock, loop_all, loop, is_pd, is_df, presync, df_concat
 
@@ -79,6 +79,8 @@ __all__ = ['ewma', 'ewmstd', 'ewmvar', 'ewmskew', 'ewmrms',  'ewmcor',  'ewmcorr
 @pd2np
 @compiled
 def _ewma(a, n, time, t = np.nan, t0 = 0, t1 = 0):
+    if n == 1:
+        return a, t, t0, t1
     w = _w(n)
     res = np.empty_like(a)
     i0 = 0
@@ -101,6 +103,8 @@ def _ewma(a, n, time, t = np.nan, t0 = 0, t1 = 0):
 @pd2np
 @compiled
 def _ewmrms(a, n, time, t = np.nan, t0 = 0., t2 = 0.):
+    if n == 1:
+        return a, t, t0, t2
     w = _w(n)
     res = np.empty_like(a)
     i0 = 0
@@ -124,6 +128,8 @@ def _ewmrms(a, n, time, t = np.nan, t0 = 0., t2 = 0.):
 @pd2np
 @compiled
 def _ewmstd(a, n, time, t = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = 0.25, bias = False, calculator = stdev_calculation_ewm):
+    if n == 1:
+        return np.full_like(a, 0.0), t, t0, t1, t2, w2
     w = _w(n)
     res = np.empty_like(a)
     i0 = 0
@@ -158,6 +164,8 @@ def _ewmcor(a, b, ba, n, time, t = np.nan, t0 = 0, a1 = 0, a2 = 0, b1 = 0, b2 = 
     pd.Series(data, drange(-9999)).plot()
 
     """
+    if n == 1:
+        return np.full_like(a, np.nan), t, t0, a1, a2, b1, b2, ab, w2
     w = _w(n)
     res = np.empty_like(a)
     i0 = 0
@@ -191,9 +199,11 @@ def _ewmcorr(a, n, a0 = None, a1 = None, a2 = None, aa0 = None, aa1 = None, w2 =
     """
 
     """
+    m = a.shape[1]
+    if n == 1:
+        return np.full((a.shape[0], m, m), np.nan), a0, a1, a2, aa0, aa1, w2
     p = w = _w(n)
     v = 1 - w
-    m = a.shape[1]
     res = np.zeros((a.shape[0], m, m))
     a0 = np.zeros(m) if a0 is None else a0
     a1 = np.zeros(m) if a1 is None else a1
@@ -225,6 +235,115 @@ def _ewmcorr(a, n, a0 = None, a1 = None, a2 = None, aa0 = None, aa1 = None, w2 =
     return res, a0, a1, a2, aa0, aa1, w2
 
 
+@compiled
+def _ewmcovar(a, n, a0 = None, a1 = None, aa0 = None, aa1 = None, min_sample = 0.25, bias = False):
+    """
+
+    """
+    m = a.shape[1]
+    if n == 1:
+        return np.full((a.shape[0], m, m), np.nan), a0, a1, aa0, aa1
+    p = w = _w(n)
+    v = 1 - w
+    res = np.zeros((a.shape[0], m, m))
+    a0 = np.zeros(m) if a0 is None else a0
+    a1 = np.zeros(m) if a1 is None else a1
+    aa1 = np.zeros((m,m)) if aa1 is None else aa1
+    aa0 = np.zeros((m,m)) if aa0 is None else aa0
+    for i in range(a.shape[0]):
+        for j in range(m):
+            if ~np.isnan(a[i,j]):
+                a0[j] = a0[j] * p + v
+                a1[j] = a1[j] * p + v * a[i,j]
+        for j in range(m):
+            if np.isnan(a[i,j]):
+                res[i, j, :] = np.nan #if i == 0 else res[i-1, j, :] # we ffill correlations
+                res[i, :, j] = np.nan #if i == 0 else res[i-1, :, j]
+            else:
+                for k in range(j+1):
+                    if ~np.isnan(a[i,k]):
+                        aa0[j,k] = aa0[j,k] * p + v 
+                        aa1[j,k] = aa1[j,k] * p + v * a[i, j] * a[i, k]
+                        res[i, k, j] = res[i, j, k] = covariance_calculation(a0 = a0[j], a1 = a1[j], 
+                                                                           b0 = a0[k], b1 = a1[k],
+                                                                           ab = aa1[j,k], ab0 = aa0[j,k],
+                                                                           min_sample = min_sample, bias = bias)                    
+    return res, a0, a1, aa0, aa1
+
+
+def ewmcovar_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer'):
+    """
+    This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
+    
+    :Returns:
+    ---------
+        a dict with:
+            - data: t x n x n covariance matrix
+            - index: timeseries index
+            - columns: columns of original data
+
+    See ewmcorr for full details.
+    
+    """
+    state = {} if instate is None else instate
+    arr = df_concat(a, join = join)
+    if isinstance(arr, np.ndarray):
+        res, a0, a1, aa0, aa1 = _ewmcovar(arr, n, min_sample = min_sample, bias = bias, **state)
+        if res.shape[1] == 2:
+            res = res[:, 0, 1]
+        return dict(data = res, columns = None, index = None, state = dict(a0=a0, a1=a1, aa0=aa0, aa1=aa1))
+    elif is_df(arr):
+        index = arr.index
+        columns = list(arr.columns)
+        res, a0, a1, aa0, aa1 = _ewmcovar(arr.values, n, min_sample = min_sample, bias = bias, **state)
+        state = dict(a0=a0, a1=a1, aa0=aa0, aa1=aa1)
+        return dict(data = res, columns = columns, index = index, state = state)
+    else:
+        raise ValueError('unsure how to calculate correlation matrix for a %s'%a)
+
+ewmcovar_.ouput = ['data', 'columns', 'index', 'state']
+
+
+def ewmcovar(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer'):
+    """
+    This calculates a full covariance matrix as a timeseries. 
+
+    :Parameters:
+    ----------
+    a : np.array or a pd.DataFrame
+        multi-variable timeseries to calculate correlation for
+    n : int
+        days for which rolling correlation is calculated.
+    min_sample : float, optional
+        Minimum observations needed before we calculate correlation. The default is 0.25.
+    bias : bool, optional
+        input to stdev calculations, the default is False.
+    instate : dict, optional
+        historical calculations so far.
+
+    :Returns:
+    -------
+    covariance (as t x n x n np.array)
+        
+        
+    :Example: a pair of ts
+    ---------
+    >>> a = pd.DataFrame(np.random.normal(0,3,(10000,10)), drange(-9999))
+    >>> res = ewmcovar(a, 250)
+    
+    >>> # We first check that diagonal is indeed the (biased) variance of the variables: 
+    >>> ratio = pd.Series([res[-1][i,i] for i in range(10)]) / ewmvar(a, 250, bias=True).iloc[-1]
+    >>> assert ratio.max() < 1.0001 and ratio.min() > 0.9999
+    
+    To access individually, here we calculate the correlation between 0th and 1st timeseries. That correlation is close to 0 (Fisher distribution) so...
+    
+    >>> cor = pd.Series(res[:,0,1] / np.sqrt(res[:,0,0] * res[:,1,1]), a.index)
+    >>> cor.plot()
+    >>> assert cor.max() < 0.3 and cor.min() > -0.3
+    """
+    return ewmcovar_(a, n, min_sample = min_sample, bias = bias, instate = instate , join = join).get('data')
+
+
 def ewmcorr_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer'):
     """
     This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
@@ -252,14 +371,12 @@ def ewmcorr_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'oute
     else:
         raise ValueError('unsure how to calculate correlation matrix for a %s'%a)
 
-        
-        
-    
+ewmcorr_.ouput = ['data', 'state']
+
 
 def ewmcorr(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer'):
     """
     This calculates a full correlation matrix as a timeseries. 
-    The calculation is returned as an xarray.Dataset object, which is a multidimensional data structure.
 
     :Parameters:
     ----------

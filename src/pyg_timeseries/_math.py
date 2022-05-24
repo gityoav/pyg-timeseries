@@ -95,6 +95,17 @@ def cor_calculation_ewm(t0, a1, a2, b1, b2, w2, ab, min_sample, bias = False):
     else:
         return np.nan
 
+
+@compiled
+def covariance_calculation(ab0, a0, a1, b0, b1, ab, min_sample, bias = False):
+    if ab0<=min_sample or a0<=min_sample or b0<=min_sample:
+        return np.nan
+    Eab = ab/ab0
+    Ea = a1/a0
+    Eb = b1/b0
+    return Eab - Ea*Eb
+
+
 @compiled
 def corr_calculation_ewm(ab0, a0, a1, a2, aw2, b0, b1, b2, bw2, ab, min_sample, bias = False):
     if ab0<=min_sample or a0<=min_sample or b0<=min_sample:

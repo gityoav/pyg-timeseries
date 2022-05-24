@@ -156,7 +156,7 @@ def ts_count_(a, axis = 0, data = None, instate = None):
 
 @loop_all
 def _ts_sum(a, vec = None):
-    vec = _vec(vec,2,0.)
+    vec = _vec(a, vec, 2, 0.)
     vec = _moments(a, vec)
     return vec[1], vec
     
@@ -217,7 +217,7 @@ def ts_sum_(a, axis = 0, data = None, instate = None):
 
 @loop_all
 def _ts_mean(a, vec = None):
-    vec = _vec(vec,2,0.)
+    vec = _vec(a, vec,2,0.)
     vec = _moments(a, vec)
     return vec[1]/vec[0], vec
 
@@ -330,7 +330,7 @@ def ts_cor(a, b, min_sample = 3, axis = 0, data = None, state = None):
     >>> assert new == ts_std(a)
 
     """
-    state = state or dict(vec = _vec(None,6,0.))
+    state = state or dict(vec = _vec(a, None,6,0.))
     rtn = first_(_ts_cor(a, b, min_sample = min_sample, **state))
     return rtn
 
@@ -339,7 +339,7 @@ def ts_cor_(a, b, min_sample = 3, axis = 0, data = None, instate = None):
     ts_cor_(a, b) is equivalent to ts_cor(a,b) except vec is also returned.
     See ts_std for full documentation    
     """
-    state = instate or dict(vec = _vec(None,6,0.))
+    state = instate or dict(vec = _vec(a, None,6,0.))
     if is_num(a) or (isinstance(a, list) and is_nums(a)):
         a = np.array(as_list(a))
     if is_num(b) or (isinstance(b, list) and is_nums(b)):
@@ -349,7 +349,7 @@ def ts_cor_(a, b, min_sample = 3, axis = 0, data = None, instate = None):
 
 @loop_all
 def _ts_std(a, vec = None):
-    vec = _vec(vec,3,0.)
+    vec = _vec(a, vec, 3, 0.)
     vec = _moments(a, vec)
     return stdev_calculation(*vec), vec
 
@@ -398,7 +398,7 @@ def ts_std_(a, axis = 0, data = None, instate = None):
 
 @loop_all
 def _ts_rms(a, vec = None):
-    vec = _vec(vec,3,0.)
+    vec = _vec(a, vec, 3, 0.)
     vec = _moments(a, vec)
     return np.sqrt(vec[2]/vec[0]), vec
     
@@ -463,7 +463,7 @@ def ts_rms_(a, axis = 0, data = None, instate = None):
 
 @loop_all
 def _ts_skew(a, bias = False, min_sample = 0.25, vec = None):
-    vec = _vec(vec,4,0.)
+    vec = _vec(a, vec, 4, 0.)
     vec = _moments(a, vec)
     return skew_calculation(t0 = vec[0], t1 = vec[1], t2 = vec[2], t3 = vec[3], bias = bias, min_sample = min_sample), vec
 
