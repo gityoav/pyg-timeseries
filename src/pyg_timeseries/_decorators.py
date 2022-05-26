@@ -1,5 +1,6 @@
-from pyg_base import getargspec, first, Dict, loop, zipper, as_list
+from pyg_base import getargspec, first, Dict, loop, zipper, as_list, getargs, wrapper
 from numba import njit
+import numpy as np
 
 __all__ = ['compiled']
 
@@ -38,6 +39,128 @@ def _ignore(ignore, data, state):
     if 'state' in ignore:
         state = {}
     return data, state
+
+
+
+@loop(dict, tuple, list)
+def _mask(arg, mask, apply_axis):
+    """
+    removes nans based on a 1-d mask
+
+    """
+    res = arg
+    f = len(mask)
+    if isinstance(arg, np.ndarray):
+        if (len(arg.shape) == 1 or apply_axis == 0) and arg.shape[0] == f:
+            res = res[mask]
+        elif len(arg.shape) > 1 and apply_axis == 1 and arg.shape[1] == f:
+            res = res[:, mask]
+        elif len(arg.shape) > 2 and apply_axis == 2 and arg.shape[2] == f:
+            res = res[:, mask]
+    return res
+
+def _unmask1(arg, mask, apply_axis):
+    n = len(mask[mask]) # len of no nans
+    f = len(mask) # full length
+    res = arg
+    if (len(arg.shape) > 0 and apply_axis == 0) and arg.shape[0] == n:
+        res = np.full( (f,) + arg.shape[1:], np.nan)
+        res[mask] = arg
+    elif len(arg.shape) > 1 and apply_axis == 1 and arg.shape[1] == n:
+        res = np.full((arg.shape[0], f) + arg.shape[2:], np.nan)
+        res[:, mask] = arg
+    elif len(arg.shape) > 2 and apply_axis == 2 and arg.shape[2] == n:
+        res = np.full((arg.shape[0], arg.shape[1], f) + arg.shape[3:], np.nan)
+        res[:, mask] = arg
+    return res
+    
+
+@loop(dict, tuple, list)
+def _unmask(arg, masks):
+    """
+    returns nans based on a 1-d mask
+    
+    :Example:
+    ----------
+    >>> mask0 = np.array([True, False, True, True, False, True])
+    >>> mask1 = np.array([True, False, True, True])
+    >>> mask2 = np.array([True, True, False, True])
+    >>> arg = np.array([[1,2,3.], [4,5,6.], [7,8,9.], [10,11,12]])
+    >>> arg_ = _unmask1(_unmask1(arg, mask0, 0), mask1, 1)
+    >>> arg1 = np.array([[1,2,3.], [4,5,6.], [7,8,9.]])
+    >>> arg1_ = _unmask1(_unmask1(arg1, mask1, 0), mask1, 1)
+    >>> arg2_ = _unmask1(_unmask1(arg1, mask2, 0), mask1, 1)
+    
+    
+    >>> mask_nan_in_array(np.sum)(arg_, axis = 0)
+    >>> mask_nan_in_array(np.sum)(arg, axis = 0)
+    _unmask(mask_nan_in_array(np.sum)(arg, axis = 0), mask1, 1)
+    
+    >>> arg = _mask(_mask(arg, mask, apply_axis = 0), mask, 1)
+    
+    
+
+    """
+    res = arg
+    if isinstance(arg, np.ndarray):
+        if len(arg.shape) == 1: ## we give priorities to earlier dimensions
+            masks = {apply_axis: mask for apply_axis, mask in masks.items() if len(mask[mask]) == arg.shape[0]}
+            if len(masks) == 0:
+                return res
+            elif len(masks) > 1:
+                unique_masks = set([tuple(mask) for mask in masks.values()])
+                if len(unique_masks) > 1:
+                    raise ValueError('There are multiple dimension possible to unmask the result %s'%masks)
+            else:
+                for apply_axis, mask in masks.items():
+                    f = len(mask)
+                    res = np.full(f, np.nan)
+                    res[mask] = arg
+                    return res
+        elif len(arg.shape) == 2 and max(mask.keys()) == 3:
+            raise ValueError('not implemented')
+        for apply_axis, mask in masks.items():
+            res = _unmask1(res, mask, apply_axis)
+    return res
+
+
+def _arg(function, args, kwargs):
+    if len(args):
+        arg = args[0]
+    else:
+        arg = kwargs[getargs(function)[0]]
+    return arg
+    
+class mask_nans(wrapper):
+    """
+    This wrapper allows us to operate in as if nan's are not actually provided
+    """
+    def __init__(self, function = None, apply_axis = None, exclude_any_nan = False):
+        return super(mask_nans, self).__init__(function = function, apply_axis = apply_axis, exclude_any_nan = exclude_any_nan)
+
+    def wrapped(self, *args, **kwargs):
+        arg = _arg(self.function, args, kwargs)
+        if not isinstance(arg, np.ndarray):
+            return self.function(*args, **kwargs)        
+        masks = {}
+        mask = ~np.isnan(arg)
+        args_, kwargs_ = args, kwargs
+        for apply_axis in range(len(arg.shape)):
+            if self.apply_axis is None or apply_axis in as_list(self.apply_axis):
+                msk = mask
+                for other_axis in range(len(arg.shape)):
+                    if other_axis!=apply_axis:
+                        msk = msk.min(axis = other_axis) if self.exclude_any_nan else msk.max(axis = other_axis)
+                if not msk.min():
+                    masks[apply_axis] = msk
+                    args_, kwargs_ = _mask((args_, kwargs_), mask = msk, apply_axis = apply_axis)
+                    arg = _arg(self.function, args_, kwargs_)
+
+        res = self.function(*args_, **kwargs_)
+        res = _unmask(res, masks)
+        return res
+
+
 
 # import pandas as pd
 # from pyg.base import wrapper, is_ts, is_dict, is_tuple, getargspec, loop, first, Dict, zipper

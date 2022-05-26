@@ -4,6 +4,7 @@ import datetime
 from scipy.optimize import minimize
 TOLERANCE = 1e-10
 from pyg_base import pd2np, is_df
+from pyg_timeseries._decorators import mask_nans
 
 __all__ = ['riskparity']
 
@@ -65,54 +66,41 @@ _constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1.0},
                    {'type': 'ineq', 'fun': lambda x: x})
 
 
+@mask_nans
 def _riskparity(covariances, assets_risk_budget = None, initial_weights = None, tol = None):
 
     # Restrictions to consider in the optimisation: only long positions whose
     # sum equals 100%
-
     n = covariances.shape[0]
+    if n == 0:
+        return np.array([]).astype(float)
     if initial_weights is None:
-        initial_weights = np.full(n, 1.)
-    x0 = np.full(5, np.nan)
+        x0 = np.full(n,  1./n)
+    else:
+        x0_mask = np.isnan(initial_weights)
+        if x0_mask.min():
+            x0 = np.full(n, 1./n)
+        else:
+            x0 = initial_weights
+            x0[x0_mask] = np.mean(x0[~x0_mask])
+    x0 = x0 / np.sum(x0)
 
     if assets_risk_budget is None:
-        assets_risk_budget = np.full(n, 1.)
-
-    mask = np.isnan(covariances).min(axis = 1)
-    if np.max(mask):
-        cov = covariances[~mask][:,~mask]
-        x0 = initial_weights[~mask]
-        arb = assets_risk_budget[~mask]
+        arb = np.full(n, 1. / n)
     else:
-        cov = covariances
-        x0 = initial_weights
-        arb = assets_risk_budget
-    
-    if len(cov) == 0:
-        return np.full(n, np.nan)      
-
-    if np.isnan(cov).max():
-        return np.full(n, np.nan)      
-
-    x0_mask = np.isnan(x0)
-    if x0_mask.min():
-        x0 = np.full(x0.shape[0], 1. / x0.shape[0])
-    else:
-        x0[x0_mask] = np.mean(x0[~x0_mask])
-        x0 = x0 / np.sum(x0)
-    
-    arb[np.isnan(arb)] = 0
-    if np.sum(arb) == 0:
-        arb = np.full(arb.shape[0], 1. / arb.shape[0])
-    else:
-        arb = arb / np.sum(arb)
+        arb = assets_risk_budget.copy()
+        arb[np.isnan(arb)] = 0
+        if np.sum(arb) == 0:
+            arb = np.full(n, 1./n)
+        else:
+            arb = arb / np.sum(arb)
         
     tol = tol or TOLERANCE
     
    # Optimisation process in scipy
     optimize_result = minimize(fun = _risk_budget_objective_error,
                                x0 = x0,
-                               args = [cov, arb],
+                               args = [covariances, arb],
                                method = 'SLSQP',
                                constraints = _constraints,
                                tol = tol,
@@ -120,14 +108,7 @@ def _riskparity(covariances, assets_risk_budget = None, initial_weights = None, 
 
     # Recover the weights from the optimised object
     weights = optimize_result.x
-
-    if np.max(mask): # there were some np.nan assets
-        result = np.full(n, np.nan)
-        result[~mask] = weights
-        return result
-    else:
-        # It returns the optimised weights
-        return weights
+    return weights
 
 @pd2np
 def _riskparity3d(covariances, assets_risk_budget = None, initial_weights = None, tol = None):
@@ -196,7 +177,7 @@ def riskparity(covariances, assets_risk_budget = None, tol = None, columns = Non
     >>> vrtn = df_concat(rs.vrtn, rs.ticker)
     >>> vrtn1w = v2na(vrtn.resample('w').sum())
 
-    >>> from pyg_timeseries import ewmcovar
+    >>> from pyg_timeseries import *
     >>> cor = ewmcorr_(vrtn1w, 52)['data']
     >>> cov = ewmcovar_(vrtn1w, 52)
     >>> res = riskparity(cor['data']**2, columns = cor['columns'], index = cor['index'])
