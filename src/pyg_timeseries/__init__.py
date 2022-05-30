@@ -13,10 +13,10 @@ from pyg_timeseries._expanding import cumsum, cumprod, cumsum_, cumprod_, \
 from pyg_timeseries._ts import ts_std, ts_sum, ts_mean, ts_skew, ts_count, ts_min, ts_max, ts_rms, ts_median, ts_cor, \
                                             ts_interval, ts_std_, ts_sum_, ts_mean_, ts_skew_, ts_count_, ts_min_, ts_max_, ts_rms_, ts_cor_
                                             
-from pyg_timeseries._ewmxo import ewmxo, ewmxo_, ou_factor, ewmacd, ewmacd_, ewmvol_, ewmvol
+from pyg_timeseries._ewmxo import ou_factor, ewmacd, ewmacd_, ewmvol_, ewmvol
 from pyg_timeseries._xrank import xrank
 from pyg_timeseries._ewmcombine import ewmcombine, ewmcombined
 from pyg_timeseries._pandas import fnna_like
 from pyg_timeseries._opt import least_squares
 from pyg_timeseries._iter import ts_iterate
-from pyg_timeseries._riskparity import riskparity
+from pyg_timeseries._linalg import riskparity, eigenvalues, eigenvectors, det, matmul

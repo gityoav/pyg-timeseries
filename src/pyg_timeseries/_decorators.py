@@ -1,4 +1,4 @@
-from pyg_base import getargspec, first, Dict, loop, zipper, as_list, getargs, wrapper
+from pyg_base import getargspec, getcallarg, first, Dict, loop, zipper, as_list, getargs, wrapper, skip_if_data_pd
 from numba import njit
 import numpy as np
 
@@ -120,16 +120,9 @@ def _unmask(arg, masks):
         elif len(arg.shape) == 2 and max(mask.keys()) == 3:
             raise ValueError('not implemented')
         for apply_axis, mask in masks.items():
-            res = _unmask1(res, mask, apply_axis)
+            res = _unmask1(res, mask = mask, apply_axis = apply_axis)
     return res
 
-
-def _arg(function, args, kwargs):
-    if len(args):
-        arg = args[0]
-    else:
-        arg = kwargs[getargs(function)[0]]
-    return arg
     
 class mask_nans(wrapper):
     """
@@ -139,7 +132,7 @@ class mask_nans(wrapper):
         return super(mask_nans, self).__init__(function = function, apply_axis = apply_axis, exclude_any_nan = exclude_any_nan)
 
     def wrapped(self, *args, **kwargs):
-        arg = _arg(self.function, args, kwargs)
+        arg = getcallarg(self.function, args, kwargs)
         if not isinstance(arg, np.ndarray):
             return self.function(*args, **kwargs)        
         masks = {}
@@ -153,14 +146,79 @@ class mask_nans(wrapper):
                         msk = msk.min(axis = other_axis) if self.exclude_any_nan else msk.max(axis = other_axis)
                 if not msk.min():
                     masks[apply_axis] = msk
-                    args_, kwargs_ = _mask((args_, kwargs_), mask = msk, apply_axis = apply_axis)
-                    arg = _arg(self.function, args_, kwargs_)
-
+                    args_ = tuple([_mask(a, msk, apply_axis) for a in args_])
+                    kwargs_ = {k:_mask(v, msk, apply_axis) for k,v in kwargs_.items()}
+                    arg = getcallarg(self.function, args_, kwargs_)
         res = self.function(*args_, **kwargs_)
         res = _unmask(res, masks)
         return res
 
+@loop(dict, list, tuple)
+def _stretch_over_time(arg, t):
+    if isinstance(arg, np.ndarray) and len(arg.shape) and arg.shape[0] == t:
+        return arg
+    else:
+        return np.array([arg] * t)
 
+
+
+class apply_along_first_axis(wrapper):
+    """
+    applies a function along 1st axis (similar to np.apply_along_axis)
+    
+    :Parameters:
+    ------------
+    base_shape:
+        defines the minimum shape of the non-time axis object.
+
+    state:
+        allows the function to take the output of the previous row and feed it back as input to next row calculation
+    
+    
+    :Example: base_shape
+    ---------
+    >>> vector = np.array([1,2,3])
+    >>> mtrx = np.array([[1,2], [3,4], [5,6]])
+    >>> assert mtrx.shape == (3,2)
+
+    >>> f1 = apply_along_first_axis(np.sum, base_shape = 1) ## I EXPECT to operate on rows, so if you see a matrix, apply
+    >>> assert eq(f1(mtrx), np.array([ 3,  7, 11]))
+    >>> assert eq(f1(vector), 6)
+        
+    >>> f2 = apply_along_first_axis(np.sum, base_shape = 2) ## I am EXPECTING a matrix in each time unit, so a isn't time at all, it is a single valued matrix 
+    >>> assert f2(mtrx) == np.sum(mtrx)
+    >>> assert f2(vector) == np.sum(vector)
+    
+    :Example: state
+    ------------------
+    >>> f = lambda vector, running_total = 0: np.sum(vector) + running_total
+    >>> cumsum = apply_along_first_axis(f, base_shape = 1, state = 'running_total')
+    >>> assert eq(cumsum(mtrx), np.array([3,10,21]))
+    """
+    def __init__(self, function = None, base_shape = 1, state = None):
+        return super(apply_along_first_axis, self).__init__(function = function, base_shape = base_shape, state = state)
+
+    def wrapped(self, *args, **kwargs):
+        arg = getcallarg(self.function, args, kwargs)
+        if not isinstance(arg, np.ndarray) or len(arg.shape)<=self.base_shape:
+            return self.function(*args, **kwargs)        
+        t = arg.shape[0]
+        args_, kwargs_ = _stretch_over_time((args, kwargs), t = t)       
+        if self.state is None:
+            res = [self.function(*[arg_[i] for arg_ in args_], **{k : v[i] for k, v in kwargs_.items()}) for i in range(t)]
+        else:
+            i = 0
+            states = as_list(self.state)
+            res = [self.function(*[arg_[i] for arg_ in args_], **{k : v[i] for k, v in kwargs_.items()})]
+            for i in range(1, t):
+                kw = {k : v[i] for k, v in kwargs_.items()}
+                for state in states:
+                    kw[state] = res[i-1][state] if isinstance(res[i-1], dict) else res[i-1]
+                res.append(self.function(*[arg_[i] for arg_ in args_], **kw))
+        if len(res) and isinstance(res[0], dict):
+            return type(res[0])({k : np.array([r.get(k) for r in res]) for k in res[0].keys()})
+        else:
+            return np.array(res)
 
 # import pandas as pd
 # from pyg.base import wrapper, is_ts, is_dict, is_tuple, getargspec, loop, first, Dict, zipper

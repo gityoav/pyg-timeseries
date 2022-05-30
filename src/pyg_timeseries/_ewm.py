@@ -271,7 +271,7 @@ def _ewmcovar(a, n, a0 = None, a1 = None, aa0 = None, aa1 = None, min_sample = 0
     return res, a0, a1, aa0, aa1
 
 
-def ewmcovar_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer'):
+def ewmcovar_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer', method = None):
     """
     This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
     
@@ -286,7 +286,7 @@ def ewmcovar_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'out
     
     """
     state = {} if instate is None else instate
-    arr = df_concat(a, join = join)
+    arr = df_concat(a, join = join, method = method)
     if isinstance(arr, np.ndarray):
         res, a0, a1, aa0, aa1 = _ewmcovar(arr, n, min_sample = min_sample, bias = bias, **state)
         if res.shape[1] == 2:
@@ -304,7 +304,7 @@ def ewmcovar_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'out
 ewmcovar_.ouput = ['data', 'columns', 'index', 'state']
 
 
-def ewmcovar(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer'):
+def ewmcovar(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer', method = None):
     """
     This calculates a full covariance matrix as a timeseries. 
 
@@ -341,17 +341,17 @@ def ewmcovar(a, n, min_sample = 0.25, bias = False, instate = None, join = 'oute
     >>> cor.plot()
     >>> assert cor.max() < 0.3 and cor.min() > -0.3
     """
-    return ewmcovar_(a, n, min_sample = min_sample, bias = bias, instate = instate , join = join).get('data')
+    return ewmcovar_(a, n, min_sample = min_sample, bias = bias, instate = instate , join = join, method = method).get('data')
 
 
-def ewmcorr_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer'):
+def ewmcorr_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer', method = None):
     """
     This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
     See ewmcorr for full details.
     
     """
     state = {} if instate is None else instate
-    arr = df_concat(a, join = join)
+    arr = df_concat(a, join = join, method = method)
     if isinstance(arr, np.ndarray):
         res, a0, a1, a2, aa0, aa1, w2 = _ewmcorr(arr, n, min_sample = min_sample, bias = bias, **state)
         if res.shape[1] == 2:
@@ -374,7 +374,7 @@ def ewmcorr_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'oute
 ewmcorr_.ouput = ['data', 'state']
 
 
-def ewmcorr(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer'):
+def ewmcorr(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer', method = None):
     """
     This calculates a full correlation matrix as a timeseries. 
 
@@ -458,7 +458,7 @@ def ewmcorr(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer
     >>> 2021-09-02  1.0  0.875766  0.725399
     
     """
-    return ewmcorr_(a, n, min_sample = min_sample, bias = bias, instate = instate , join = join).get('data')
+    return ewmcorr_(a, n, min_sample = min_sample, bias = bias, instate = instate , join = join, method = method).get('data')
 
 
 

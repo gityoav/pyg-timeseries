@@ -1,5 +1,5 @@
 from pyg_base import df_reindex, df_concat, is_nums, Dict, mul_, loop, dictable, try_back, is_df, pd2np
-from pyg_timeseries._rolling import na2v, ffill, v2na, fnna
+from pyg_timeseries._rolling import na2v, ffill, v2na, fnna, shift
 from pyg_timeseries._ewm import ewma, ewmcorr, ewmstd
 from pyg_timeseries._pandas import fnna_like
 import numpy as np
@@ -106,11 +106,12 @@ def _ewmcombine(a, w, n = 128, vol_days = None, corr = None):
     else:
         variance = w2 + wij * erho # and hence an estimate for variance
     variance[variance<=0] = np.nan
+    variance = shift(variance)
     vol = ffill(np.sqrt(variance))
     mult = 1/vol
     data = x/vol
     normalized_mult = mult * w1
-    return dict(data = data, vol = vol, rho = erho, mult = mult, normalized_mult = normalized_mult, cor = c_ if full else None, vols = vols if vol_days else 1)
+    return dict(data = x, vol = vol, rho = erho, mult = mult, normalized_mult = normalized_mult, cor = c_ if full else None, vols = vols if vol_days else 1)
 
 
 @loop(list)

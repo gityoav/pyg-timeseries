@@ -713,6 +713,8 @@ def diff(a, n=1, time = None, axis = 0, data = None, state = None):
     """
     if n == 0:
         return a - a
+    if is_num(state) and n == 1:
+        state = Dict(vec = np.array([state]), i = 0)
     state = state or Dict(vec = None, i = 0, t = np.nan)
     state.vec = _vec(a,state.vec, n, axis=axis)
     return first_(_tdiff1(a, time = time, axis = axis, **state) if n == 1 
