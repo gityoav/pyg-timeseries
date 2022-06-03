@@ -276,7 +276,7 @@ def _matmul(matrix, rhs = None, lhs = None):
     res = reducer(_mult, matrices)
     return res
 
-def matmul(matrix, rhs = None, lhs = None, data = None):
+def matmul(matrix, rhs = None, lhs = None, data = None, index = None, columns = None):
     """
 
     :Example: simple matrix multiplication
@@ -317,7 +317,7 @@ def matmul(matrix, rhs = None, lhs = None, data = None):
     >>> assert eq(matmul(matrix, rhs, rhs), 27)
     >>> assert matmul(rhs, lhs) == 5
     """    
-    return _matmul(matrix = matrix, rhs = rhs, lhs = lhs, data = data)
+    return _matmul(matrix = matrix, rhs = rhs, lhs = lhs, data = data, index = index, columns = columns)
 
 
 def riskparity(covariances, assets_risk_budget = None, tol = None, columns = None, index = None, data = None):

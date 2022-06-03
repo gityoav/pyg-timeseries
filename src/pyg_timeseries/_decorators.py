@@ -117,7 +117,7 @@ def _unmask(arg, masks):
                     res = np.full(f, np.nan)
                     res[mask] = arg
                     return res
-        elif len(arg.shape) == 2 and max(mask.keys()) == 3:
+        elif len(arg.shape) == 2 and len(masks) and max(masks.keys()) == 3:
             raise ValueError('not implemented')
         for apply_axis, mask in masks.items():
             res = _unmask1(res, mask = mask, apply_axis = apply_axis)

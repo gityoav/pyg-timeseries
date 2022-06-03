@@ -1,7 +1,8 @@
-from pyg_base import pd2np, is_num, is_rng, is_pd
+from pyg_base import pd2np, is_num, is_rng, is_pd, loop, is_arr
 from pyg_timeseries._rolling import fnna
 import numpy as np
 
+@loop(list)
 @pd2np
 def _fnna_like(source, target = 1., default = np.nan):
     """
@@ -44,7 +45,7 @@ def _fnna_like(source, target = 1., default = np.nan):
 
     """
     f = fnna(source)
-    if is_num(target) or is_rng(target):
+    if is_num(target) or is_rng(target) or (is_arr(target) and len(target.shape) == 1 and target.shape[0] == source.shape[1]):
         a = np.full(source.shape, fill_value = target)
     else:
         a = target.copy()
@@ -55,7 +56,6 @@ def _fnna_like(source, target = 1., default = np.nan):
         for i, j in enumerate(f):
             a[:j,i] = default
     return a
-
 
 def fnna_like(source, target = 1., default = np.nan):
     if is_pd(source) and is_pd(target):
