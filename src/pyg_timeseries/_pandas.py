@@ -1,5 +1,6 @@
-from pyg_base import pd2np, is_num, is_rng, is_pd, loop, is_arr
-from pyg_timeseries._rolling import fnna
+from pyg_base import pd2np, is_num, is_rng, is_pd, loop, is_arr, df_reindex
+from pyg_timeseries._rolling import fnna, na2v
+import pandas as pd
 import numpy as np
 
 @loop(list)
@@ -61,3 +62,19 @@ def fnna_like(source, target = 1., default = np.nan):
     if is_pd(source) and is_pd(target):
         target = target.reindex(source.index)
     return _fnna_like(source, target, default)
+
+
+def reindex_3d(array, index, original_index, method = None, limit = None):
+    if len(array.shape)<3:
+        if isinstance(array, np.ndarray):
+            ts = pd.Series(array, index = original_index) if len(array.shape) == 1 else pd.DataFrame(array, index = original_index)
+        else:
+            ts = array
+        return df_reindex(ts, index = index, method = method, limit = limit)                    
+    default = np.full(array[0].shape, method if is_num(method) else np.nan)
+    idx = df_reindex(pd.Series(range(array.shape[0]), original_index), index, method = None if is_num(method) else method, limit = limit).values
+    res = np.array([default if np.isnan(idx[i]) else array[int(idx[i])] for i in range(len(idx))])
+    if is_num(method):
+        res = na2v(res, method)
+    return res
+    

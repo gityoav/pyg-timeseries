@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy.optimize import minimize
 TOLERANCE = 1e-10
-from pyg_base import pd2np, is_df, skip_if_data_pd_or_np, try_nan, as_list, reducer, is_num, is_nums
+from pyg_base import pd2np, is_df, skip_if_data_pd_or_np, try_nan, as_list, reducer, is_num, is_nums, is_pd
 from pyg_timeseries._decorators import mask_nans, apply_along_first_axis
 
 __all__ = ['riskparity']
@@ -230,6 +230,10 @@ def _mult(a, b):
     - supports multiplying by numbers
     - supports multiplying by vectors posing as 1xn matrices
     """
+    if is_pd(a):
+        a = a.values
+    if is_pd(b):
+        b = b.values
     if is_num(a) or is_num(b):
         return a * b
     if len(a.shape) == 1 and len(b.shape) == 1:
@@ -271,7 +275,6 @@ def _as_list(value):
 @apply_along_first_axis(base_shape = 2)
 @mask_nans
 def _matmul(matrix, rhs = None, lhs = None):
-    
     matrices = _as_list(lhs) + _as_list(matrix) + _as_list(rhs)
     res = reducer(_mult, matrices)
     return res
@@ -429,3 +432,6 @@ def riskparity(covariances, assets_risk_budget = None, tol = None, columns = Non
                 res = np.concatenate([data, res])
             return res
 
+    
+    
+    
