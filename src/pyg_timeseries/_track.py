@@ -43,7 +43,7 @@ def _int_nearest_target(target, init = None):
 
 
 
-def _minimize_tracking_error(covariance, target, multiplier = None, position = None, relative_cost = None, min_change = 0.01, search = 1):
+def _minimize_tracking_error(covariance, target, multiplier = None, position = None, relative_cost = None, min_change = 0.01, search = 2):
     n = target.shape[0]
     ns = np.arange(n)
     res = _int_nearest_target(target, position)    
@@ -86,9 +86,8 @@ def _minimize_tracking_error(covariance, target, multiplier = None, position = N
                 dbase[i] = m = matmul(cr, d, d) / base - 1                
                 if m < -abs(min_change):
                     found +=1
-                    if search == 0 or found >= search:
+                    if search>0 and found >= search:
                         ok = False
-                        j = j +1
         if found > 1:
             m = min(dbase)
             i = dbase.index(m)
@@ -101,6 +100,7 @@ def _minimize_tracking_error(covariance, target, multiplier = None, position = N
             base = matmul(gradient, d)    
             if base <= 0:
                 return res, base
+            j = j +1
 
     return res, base
                 
@@ -122,7 +122,7 @@ def _get_i(value, n, i):
         return value
         
 
-def minimize_tracking_error(covariance, target, multiplier = None, min_change = 0.01, data = None, covariance_index = None, search = 1, errors = None):
+def minimize_tracking_error(covariance, target, multiplier = None, min_change = 0.01, data = None, covariance_index = None, search = 2, errors = None):
     """
     Tracks a target position within an int, while minimizing the tracking error defined as 
     
