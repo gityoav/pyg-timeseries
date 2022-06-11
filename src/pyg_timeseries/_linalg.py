@@ -434,4 +434,4 @@ def riskparity(covariances, assets_risk_budget = None, tol = None, columns = Non
 
     
     
-    
+

@@ -21,5 +21,5 @@ from pyg_timeseries._opt import least_squares
 from pyg_timeseries._iter import ts_iterate
 from pyg_timeseries._linalg import riskparity, eigenvalues, eigenvectors, det, matmul
 from pyg_timeseries._bar import bar_r2
-
+from pyg_timeseries._track import minimize_tracking_error
 
