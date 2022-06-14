@@ -1,4 +1,4 @@
-from pyg_base import getargspec, getcallarg, first, Dict, loop, zipper, as_list, getargs, wrapper, skip_if_data_pd, dt
+from pyg_base import getargspec, getcallarg, first, Dict, loop, zipper, as_list, getargs, wrapper, skip_if_data_pd, dt, is_pd
 from numba import njit
 import numpy as np
 
@@ -157,10 +157,14 @@ class mask_nans(wrapper):
 def _stretch_over_time(arg, t):
     if isinstance(arg, np.ndarray) and len(arg.shape) and arg.shape[0] == t:
         return arg
+    elif is_pd(arg) and len(arg) == t:
+        return arg
     else:
         return np.array([arg] * t)
 
-
+@loop(dict, list, tuple)
+def _i(value, i, t = None):
+    return value.iloc[i] if is_pd(value) else value[i]
 
 class apply_along_first_axis(wrapper):
     """
@@ -205,17 +209,17 @@ class apply_along_first_axis(wrapper):
         t = arg.shape[0]
         args_, kwargs_ = _stretch_over_time((args, kwargs), t = t)       
         if self.state is None:
-            res = [self.function(*[arg_[i] for arg_ in args_], **{k : v[i] for k, v in kwargs_.items()}) for i in range(t)]
+            res = [self.function(*_i(args_,i,t), **_i(kwargs,i,t)) for i in range(t)]
         else:
             i = 0
             t0 = dt()
             states = as_list(self.state)
-            res = [self.function(*[arg_[i] for arg_ in args_], **{k : v[i] for k, v in kwargs_.items()})]
+            res = [self.function(*_i(args_,i,t), **_i(kwargs,i,t))]
             for i in range(1, t):
-                kw = {k : v[i] for k, v in kwargs_.items()}
+                kw = _i(kwargs_, i, t)
                 for state in states:
                     kw[state] = res[i-1][state] if isinstance(res[i-1], dict) else res[i-1]
-                res.append(self.function(*[arg_[i] for arg_ in args_], **kw))
+                res.append(self.function(*_i(args_,i,t), **kw))
                 if self.message and i % self.message == 0:
                     t1 = dt()
                     print(t1, 'calculated %i of %i in %s'%(i, t, t1 - t0))

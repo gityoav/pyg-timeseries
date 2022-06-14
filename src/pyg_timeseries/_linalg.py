@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy.optimize import minimize
 TOLERANCE = 1e-10
-from pyg_base import pd2np, is_df, skip_if_data_pd_or_np, try_nan, as_list, reducer, is_num, is_nums, is_pd, is_tss, df_concat, df_reindex
+from pyg_base import pd2np, is_df, skip_if_data_pd_or_np, try_nan, as_list, reducer, is_num, is_nums, is_pd, is_tss, is_list, df_concat, df_reindex
 from pyg_timeseries._rolling import v2na, na2v, ffill
 from pyg_timeseries._decorators import mask_nans, apply_along_first_axis
 
@@ -437,13 +437,15 @@ def _as_list(value):
         return []
     elif is_num(value):
         return [value]
-    elif is_nums(value):
+    elif is_list(value) and is_nums(value):
         return [np.array(value)]
+    elif is_pd(value):
+        return [value]
     else:
         return as_list(value)
 
-@skip_if_data_pd_or_np
 @pd2np
+@skip_if_data_pd_or_np
 @apply_along_first_axis(base_shape = 2)
 @mask_nans
 def _matmul(matrix, rhs = None, lhs = None):
@@ -451,7 +453,7 @@ def _matmul(matrix, rhs = None, lhs = None):
     res = reducer(_mult, matrices)
     return res
 
-def matmul(matrix, rhs = None, lhs = None, data = None, index = None, columns = None):
+def matmul(matrix, rhs = None, lhs = None, data = None, index = None, columns = None, power = 1):
     """
 
     :Example: simple matrix multiplication
@@ -492,6 +494,24 @@ def matmul(matrix, rhs = None, lhs = None, data = None, index = None, columns = 
     >>> assert eq(matmul(matrix, rhs, rhs), 27)
     >>> assert matmul(rhs, lhs) == 5
     """    
-    return _matmul(matrix = matrix, rhs = rhs, lhs = lhs, data = data, index = index, columns = columns)
-
+    lhs_    = _as_list(lhs) 
+    matrix_ = _as_list(matrix) 
+    rhs_    = _as_list(rhs)
+    pds = [m for m in lhs_ + matrix_ + rhs_ if is_pd(m)]
+    lhs_ = [m.values if is_pd(m) else m for m in lhs_]
+    rhs_ = [m.values if is_pd(m) else m for m in rhs_]
+    if index is None:
+        pd0 = [m for m in pds if m.shape[0] == matrix.shape[0]]
+        if len(pd0):
+            index = pd0[0].index
+    if columns is None:
+        pd1 = [m for m in pds if len(m.shape) == 2 and m.shape[1] == matrix.shape[1]]
+        if len(pd1):
+            columns = pd1[0].columns        
+    res = _matmul(matrix = matrix, rhs = rhs_[0], lhs = lhs_[0], data = data, index = index, columns = columns)
+    if power!=1:
+        if power<0:
+            res = v2na(res)
+        res = res ** power
+    return res
 
