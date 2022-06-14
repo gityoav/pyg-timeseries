@@ -164,7 +164,16 @@ def _stretch_over_time(arg, t):
 
 @loop(dict, list, tuple)
 def _i(value, i, t = None):
-    return value.iloc[i] if is_pd(value) else value[i]
+    if t is not None:
+        if hasattr(value, '__len__') and len(value) == t:    
+            return value.iloc[i] if is_pd(value) else value[i]
+        else:
+            return value
+    else:
+        if hasattr(value, '__len__'):    
+            return value.iloc[i] if is_pd(value) else value[i]
+        else:
+            return value
 
 class apply_along_first_axis(wrapper):
     """
@@ -207,7 +216,7 @@ class apply_along_first_axis(wrapper):
         if not isinstance(arg, np.ndarray) or len(arg.shape)<=self.base_shape:
             return self.function(*args, **kwargs)        
         t = arg.shape[0]
-        args_, kwargs_ = _stretch_over_time((args, kwargs), t = t)       
+        args_, kwargs_ = args, kwargs # _stretch_over_time((args, kwargs), t = t)       
         if self.state is None:
             res = [self.function(*_i(args_,i,t), **_i(kwargs,i,t)) for i in range(t)]
         else:

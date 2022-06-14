@@ -163,9 +163,12 @@ def riskparity(covariances, assets_risk_budget = None, columns = None, index = N
     """
     Designed to take the output from the ewmcovar calculation or a simple covariances matrix.
     Calculates risk parity weights given covariances and target budgets.
-    If data is provided, will skip calculations for previously done optimizations
+    If data is provided, will skip calculations for previously done optimizations.
     
-    See
+    The faster implementation is using pyrb available from https://github.com/jcrichard/pyrb
+    This relies on quadprog https://github.com/quadprog/quadprog which in turns requires a C compiler like the MS one.
+    
+    The slower implementation is using scipy:
     https://thequantmba.wordpress.com/2016/12/14/risk-parityrisk-budgeting-portfolio-in-python/
     or 
     https://quantdare.com/risk-parity-in-python/ 
@@ -445,7 +448,6 @@ def _as_list(value):
         return as_list(value)
 
 @pd2np
-@skip_if_data_pd_or_np
 @apply_along_first_axis(base_shape = 2)
 @mask_nans
 def _matmul(matrix, rhs = None, lhs = None):
@@ -508,10 +510,14 @@ def matmul(matrix, rhs = None, lhs = None, data = None, index = None, columns = 
         pd1 = [m for m in pds if len(m.shape) == 2 and m.shape[1] == matrix.shape[1]]
         if len(pd1):
             columns = pd1[0].columns        
-    res = _matmul(matrix = matrix, rhs = rhs_[0], lhs = lhs_[0], data = data, index = index, columns = columns)
+    res = _matmul(matrix = matrix, rhs = rhs_, lhs = lhs_)
     if power!=1:
         if power<0:
             res = v2na(res)
         res = res ** power
+    if len(res.shape) == 1 and index is not None:
+        res = pd.Series(res, index)
+    elif len(res.shape) == 2 and (index is not None or columns is not None):
+        res = pd.DataFrame(res, index, columns)        
     return res
 

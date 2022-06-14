@@ -5,7 +5,7 @@ from pyg_timeseries._max import rolling_max, rolling_max_, expanding_max, expand
 from pyg_timeseries._median import rolling_median, rolling_median_, expanding_median
 from pyg_timeseries._rank import rolling_rank, rolling_rank_, expanding_rank
 from pyg_timeseries._rolling import ffill, ffill_, ewfill, bfill, fnna, fnnz, diff, shift, ratio, rolling_mean, rolling_sum, rolling_rms, rolling_std, rolling_skew, \
-           diff_, shift_, ratio_, rolling_mean_, rolling_sum_, rolling_rms_, rolling_std_, rolling_skew_, v2na, na2v
+           diff_, shift_, ratio_, rolling_mean_, rolling_sum_, rolling_rms_, rolling_std_, rolling_skew_, v2na, na2v, buffer_, buffer
 from pyg_timeseries._stride import rolling_quantile, rolling_quantile_
 from pyg_timeseries._expanding import cumsum, cumprod, cumsum_, cumprod_, \
                 expanding_mean, expanding_sum, expanding_rms, expanding_std, expanding_skew, \

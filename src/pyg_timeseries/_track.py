@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from pyg_base import pd2np, is_pd, loop, is_df, df_reindex
+from pyg_base import pd2np, is_pd, loop, is_df, df_reindex, df_concat, is_tss
 from pyg_timeseries import matmul, reindex_3d, na2v, ffill
 
 ### single pass position calculation
@@ -41,7 +41,7 @@ def _int_nearest_target(target, init = None):
     res = init + d
     return res
 
-
+    
 
 def _minimize_tracking_error(covariance, target, multiplier = None, position = None, relative_cost = None, min_change = 0.01, search = 2):
     n = target.shape[0]
@@ -150,6 +150,8 @@ def minimize_tracking_error(covariance, target, multiplier = None, min_change = 
             - minimizes tracking error 
 
     """
+    if is_tss(target):
+        target = df_concat(target, method = 'ffill')
     if data is not None and len(data) == len(target):
         return dict(data = data, errors = errors)
 

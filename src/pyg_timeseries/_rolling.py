@@ -281,6 +281,38 @@ def _diff1(a, vec, time, i = 0, t = np.nan):
     return res, vec, i, t
 
 
+
+@loop_all
+@pd2np
+@compiled
+def _buffer(a, band, unit = 0.0, pos = 0):
+    """
+    >>> a = pd.Series(cumsum(np.random.normal(0,1,1000)), drange(-999))
+    >>> ts, pos = _buffer(a, 1, 3, 0)
+    >>> df_concat([a,ts])[dt(-100):].plot()
+    """
+    res = np.full(a.shape, np.nan)
+    if np.isnan(pos):
+        pos = 0.0
+    for i in range(a.shape[0]):
+        if not np.isnan(a[i]):
+            b = band[i]
+            if pos < a[i] - b:
+                pos = a[i] - b
+                if unit > 0:
+                    pos = np.round(pos / unit) * unit
+                    if pos < a[i] - b and pos + unit < a[i] + b:
+                        pos += unit
+            elif pos > a[i] + b:
+                pos = a[i] + b
+                if unit > 0:
+                    pos = np.round(pos / unit) * unit
+                    if pos > a[i] + b and pos - unit > a[i] - b:
+                        pos -= unit
+            res[i] = pos
+    return res, pos
+                 
+
 @loop_all
 def _tdiff(a, n, vec, i, time = None, t = None):
     time = clock(a, time, t)
@@ -688,6 +720,8 @@ def init2v(a, n = 0, new = np.nan):
     return _init2v(a, n, new)
 
 
+    
+
 def diff(a, n=1, time = None, axis = 0, data = None, state = None):
     """
     equivalent to a.diff(n) in pandas if there are no nans. If there are, we SKIP nans rather than propagate them.
@@ -741,6 +775,48 @@ def diff_(a, n=1, time = None, axis = 0, data = None, instate = None):
                        else _tdiff(a, n=n, time = time, axis = axis, **state))
 
 diff_.output = ['data', 'state']
+
+def buffer_(a, band, unit = 0.0, data = None, instate = None):
+    if is_num(instate):
+        instate = Dict(pos = instate)
+    elif instate is None:
+        instate = Dict(pos = 0.0)
+    if is_num(band):
+        band = np.full(a.shape, band)
+    return _data_state(['data', 'pos'], _buffer(a = a, band = band, unit = unit, **instate))
+        
+buffer_.output = ['data', 'state']
+
+def buffer(a, band, unit = 0.0, data = None, state = None):
+    """
+    buffer performs two functions:
+        - ensures the result is stated in 'units' so if unit == 1, output is integers
+        - slows down the trading to ensure we are always within [a-band, a+band] but does not change values while we are within the band
+    
+    :Parameters:
+    ------------
+    a : array/timeseries
+        array/timeseries
+    band: float
+        band size
+    unit: float
+        the resulting timeseries will always be whole number of units
+    data: None.
+        unused at the moment. 
+    state: dict, float, optional
+        state parameters of last position, used to instantiate the internal calculations, based on history prior to 'a' provided. 
+        please provide the variable "pos" if a dict, or just a float, indicating previous position.
+    """
+    if is_num(state):
+        state = Dict(pos = state)
+    elif state is None:
+        state = Dict(pos = 0.0)
+    if is_num(band):
+        band = np.full(a.shape, band)
+    return first_(_buffer(a, band = band, unit = unit, **state))
+    
+        
+
         
 def shift(a, n=1, axis = 0, data = None, state = None):
     """
