@@ -76,7 +76,7 @@ def _minimize_tracking_error(covariance, target, multiplier = None, position = N
         dbase = [0] * len(ns)
         for g, i in gn: 
             ## we start from the lowest gradient and work our way up. Looking for valid candidates 
-            ## The moment we find a enough candidates to perform a valid reduction, we reduce. 
+            ## The moment we find a enough candidates to perform a valid reduction in tracking error, we reduce. 
             ## if search = 0; we search exhaustively manually. search = 1 is potentially less accurate but faster. 
             ## The assumption being is that if there is another candidate, it will show in the next round of reduction anyway
             if ok and g < 0 and i not in moved:
@@ -86,7 +86,7 @@ def _minimize_tracking_error(covariance, target, multiplier = None, position = N
                 dbase[i] = m = matmul(cr, d, d) / base - 1                
                 if m < -abs(min_change):
                     found +=1
-                    if search>0 and found >= search:
+                    if search > 0 and found >= search:
                         ok = False
         if found > 1:
             m = min(dbase)
@@ -122,7 +122,7 @@ def _get_i(value, n, i):
         return value
         
 
-def minimize_tracking_error(covariance, target, multiplier = None, min_change = 0.01, data = None, covariance_index = None, search = 2, errors = None):
+def minimize_tracking_error(covariance, target, multiplier = None, min_change = 0.01, covariance_index = None, search = 2, data = None, errors = None):
     """
     Tracks a target position within an int, while minimizing the tracking error defined as 
     
@@ -170,14 +170,8 @@ def minimize_tracking_error(covariance, target, multiplier = None, min_change = 
     positions = []
     tracking_errors = []
     for i in range(len(c)):
-        """
-        covariance = _get_i(value = c, n = n, i = i)
-        target = _get_i(value = t, n = n, i = i)
-        multiplier = _get_i(value = r, n = n, i = i)
-        position = position
-        min_change = min_change
-        """    
-        print('running %i of %i'%(i, len(c)))
+        if i % 100 == 0:
+            print('running %i of %i'%(i, len(c)))
         position, tracking_error = _minimize_tracking_error(covariance = _get_i(value = c, n = n, i = i), 
                                                             target = _get_i(value = t, n = n, i = i), 
                                                             multiplier = _get_i(value = r, n = n, i = i), 

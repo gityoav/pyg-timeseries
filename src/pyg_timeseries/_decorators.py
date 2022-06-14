@@ -1,4 +1,4 @@
-from pyg_base import getargspec, getcallarg, first, Dict, loop, zipper, as_list, getargs, wrapper, skip_if_data_pd
+from pyg_base import getargspec, getcallarg, first, Dict, loop, zipper, as_list, getargs, wrapper, skip_if_data_pd, dt
 from numba import njit
 import numpy as np
 
@@ -195,8 +195,8 @@ class apply_along_first_axis(wrapper):
     >>> cumsum = apply_along_first_axis(f, base_shape = 1, state = 'running_total')
     >>> assert eq(cumsum(mtrx), np.array([3,10,21]))
     """
-    def __init__(self, function = None, base_shape = 1, state = None):
-        return super(apply_along_first_axis, self).__init__(function = function, base_shape = base_shape, state = state)
+    def __init__(self, function = None, base_shape = 1, state = None, message = None):
+        return super(apply_along_first_axis, self).__init__(function = function, base_shape = base_shape, state = state, message = message)
 
     def wrapped(self, *args, **kwargs):
         arg = getcallarg(self.function, args, kwargs)
@@ -208,6 +208,7 @@ class apply_along_first_axis(wrapper):
             res = [self.function(*[arg_[i] for arg_ in args_], **{k : v[i] for k, v in kwargs_.items()}) for i in range(t)]
         else:
             i = 0
+            t0 = dt()
             states = as_list(self.state)
             res = [self.function(*[arg_[i] for arg_ in args_], **{k : v[i] for k, v in kwargs_.items()})]
             for i in range(1, t):
@@ -215,6 +216,10 @@ class apply_along_first_axis(wrapper):
                 for state in states:
                     kw[state] = res[i-1][state] if isinstance(res[i-1], dict) else res[i-1]
                 res.append(self.function(*[arg_[i] for arg_ in args_], **kw))
+                if self.message and i % self.message == 0:
+                    t1 = dt()
+                    print(t1, 'calculated %i of %i in %s'%(i, t, t1 - t0))
+                    t0 = t1
         if len(res) and isinstance(res[0], dict):
             return type(res[0])({k : np.array([r.get(k) for r in res]) for k in res[0].keys()})
         else:

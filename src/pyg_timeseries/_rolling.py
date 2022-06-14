@@ -628,6 +628,8 @@ def v2na(a, old = 0.0, new = np.nan):
     array/timeseries
 
     """
+    if is_num(a):
+        return new if a == old else a
     return _v2na(a, old = old, new = new)
 
 def na2v(a, new = 0.0):
@@ -652,6 +654,8 @@ def na2v(a, new = 0.0):
     array/timeseries
 
     """
+    if is_num(a):
+        return new if np.isnan(a) else a
     return _na2v(a, new)
     
 

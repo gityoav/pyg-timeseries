@@ -301,7 +301,7 @@ def ewmcovar_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'out
     else:
         raise ValueError('unsure how to calculate correlation matrix for a %s'%a)
 
-ewmcovar_.ouput = ['data', 'columns', 'index', 'state']
+ewmcovar_.output = ['data', 'columns', 'index', 'state']
 
 
 def ewmcovar(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer', method = None):
@@ -371,7 +371,7 @@ def ewmcorr_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'oute
     else:
         raise ValueError('unsure how to calculate correlation matrix for a %s'%a)
 
-ewmcorr_.ouput = ['data', 'state']
+ewmcorr_.output = ['data', 'state']
 
 
 def ewmcorr(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer', method = None):
