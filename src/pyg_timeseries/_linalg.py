@@ -159,6 +159,16 @@ def _riskparity(covariances, assets_risk_budget = None, weights = None, tol = No
     fit[msk] = optimize_result.x
     return fit #, matmul(masked_c, optimize_result.x, optimize_result.x)
 
+def _data_ok(data, covariances, columns):
+    if data is None or len(data.shape)!=2: ## shape OK
+        return False
+    if data.shape[1] != covariances.shape[1]: ## matching covariances
+        return False
+    if is_df(data) and columns is not None and list(columns)!=list(data.columns): # match columns if available
+        return False
+    return True
+        
+
 def riskparity(covariances, assets_risk_budget = None, columns = None, index = None, data = None, tol = None, method = 'pyrb'):
     """
     Designed to take the output from the ewmcovar calculation or a simple covariances matrix.
@@ -239,7 +249,7 @@ def riskparity(covariances, assets_risk_budget = None, columns = None, index = N
     """
     arb = assets_risk_budget; cov = covariances; idx = index; weights = None
     cov = ffill(cov)
-    if data is not None:
+    if _data_ok(data, covariances, columns):      
         if is_df(data) and index is not None: ## previous result is a timeseries
             data = data.iloc[:-1] ## remove last calculation
             mask = ~np.array([date in data.index for date in index])
@@ -257,6 +267,8 @@ def riskparity(covariances, assets_risk_budget = None, columns = None, index = N
             if idx is not None:
                 idx = idx[n:]
             weights = data[-1]
+    else:
+        data = None
 
     if isinstance(arb, list):
         if is_nums(arb):

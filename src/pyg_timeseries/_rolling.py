@@ -1,7 +1,7 @@
 import numpy as np
 from pyg_timeseries._math import stdev_calculation, skew_calculation, _w
 from pyg_timeseries._decorators import compiled, first_, _data_state
-from pyg_base import pd2np, Dict, is_num, loop_all, loop, clock
+from pyg_base import pd2np, Dict, is_num, loop_all, loop, clock, is_pd, df_reindex
 
 __all__ = ['ffill', 'bfill', 'fnna', 'na2v', 'v2na', 'diff', 'shift', 'ratio', 'rolling_mean', 'rolling_sum', 'rolling_rms', 'rolling_std', 'rolling_skew', 
            'diff_', 'shift_', 'ratio_', 'rolling_mean_', 'rolling_sum_', 'rolling_rms_', 'rolling_std_', 'rolling_skew_']
@@ -292,11 +292,13 @@ def _buffer(a, band, unit = 0.0, pos = 0):
     >>> df_concat([a,ts])[dt(-100):].plot()
     """
     res = np.full(a.shape, np.nan)
+    b = 0.0
     if np.isnan(pos):
         pos = 0.0
     for i in range(a.shape[0]):
         if not np.isnan(a[i]):
-            b = band[i]
+            if not np.isnan(band[i]): ## we forward fill band
+                b = band[i] 
             if pos < a[i] - b:
                 pos = a[i] - b
                 if unit > 0:
@@ -813,6 +815,8 @@ def buffer(a, band, unit = 0.0, data = None, state = None):
         state = Dict(pos = 0.0)
     if is_num(band):
         band = np.full(a.shape, band)
+    if is_pd(band) and is_pd(a):
+        band = df_reindex(band, a, method = 'ffill')
     return first_(_buffer(a, band = band, unit = unit, **state))
     
         
