@@ -281,7 +281,6 @@ def _diff1(a, vec, time, i = 0, t = np.nan):
     return res, vec, i, t
 
 
-
 @loop_all
 @pd2np
 @compiled
@@ -298,7 +297,7 @@ def _buffer(a, band, unit = 0.0, pos = 0):
     for i in range(a.shape[0]):
         if not np.isnan(a[i]):
             if not np.isnan(band[i]): ## we forward fill band
-                b = band[i] 
+                b = band[i]
             if pos < a[i] - b:
                 pos = a[i] - b
                 if unit > 0:
@@ -313,7 +312,19 @@ def _buffer(a, band, unit = 0.0, pos = 0):
                         pos -= unit
             res[i] = pos
     return res, pos
-                 
+
+def _singlstep
+
+
+def _multibuffer(a, band, unit, pos, covariances, risks, weights):
+    """
+    Assumes 'a' is a vector of target positions 
+    performs a buffering of a but aiming to target a given level of risk
+    """
+    
+    
+
+
 
 @loop_all
 def _tdiff(a, n, vec, i, time = None, t = None):
@@ -817,7 +828,7 @@ def buffer(a, band, unit = 0.0, data = None, state = None):
         band = np.full(a.shape, band)
     if is_pd(band) and is_pd(a):
         band = df_reindex(band, a, method = 'ffill')
-    return first_(_buffer(a, band = band, unit = unit, **state))
+    return first_(_buffer(a = a, band = band, unit = unit, **state))
     
         
 
@@ -863,7 +874,7 @@ def shift(a, n=1, axis = 0, data = None, state = None):
     >>> new_ts = shift(new, **old_ts)
     >>> assert eq(new_ts, shift(a).iloc[3:])
     """
-    if n == 0:
+    if n == 0 or is_num(a):
         return a
     state = state or Dict(vec = None, i = 0,)
     state.vec = _vec(a, state.vec, n, axis=axis)
@@ -874,7 +885,7 @@ def shift_(a, n=1, axis = 0, instate = None):
     Equivalent to shift(a,n) but returns the full state. See shift for full details
   
     """
-    if n == 0:
+    if n == 0 or is_num(a):
         return Dict(data = a, state = instate)
     state = instate or Dict(vec = None, i = 0,)
     state.vec = _vec(a, state.vec, n, axis=axis)
@@ -905,14 +916,19 @@ def ratio(a, n=1, time = None, data = None, state = None, axis = 0):
     >>> assert eq(ratio(a), pd.Series([np.nan, 2, 1.5, 4/3,1.25], drange(-4)))
     >>> assert eq(ratio(a,2), pd.Series([np.nan, np.nan, 3, 2, 5/3], drange(-4)))
     """
+    if is_num(a):
+        return 1
     state = state or Dict(vec = None, i = 0, t = np.nan)
     state.vec = _vec(a, state.vec, n, axis=axis)
     return first_(_tratio(a, n, axis = axis, time = time, **state))
 
-def ratio_(a, n=1, time = None, axis = 0, data = None, instate = None):
+def ratio_(a, n=1, time = None, axis = 0, data = None, instate = None):        
     state = instate or Dict(vec = None, i = 0, t = np.nan) 
     state.vec = _vec(a, state.vec, n, axis=axis)
-    return _data_state(['data', 'vec', 'i', 't'], _tratio(a, n, time = time, **state))
+    if is_num(a):
+        return Dict(data = 1, state = state)
+    else:
+        return _data_state(['data', 'vec', 'i', 't'], _tratio(a, n, time = time, **state))
 
 ratio_.output = ['data', 'state']
 
