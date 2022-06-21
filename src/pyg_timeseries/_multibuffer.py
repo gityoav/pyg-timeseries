@@ -139,6 +139,8 @@ def _subset_multibuffer(subset, target, band, unit, covariances, risks, weights,
     elif is_strs(subset):
         keys = subset
         ids = Dict(zip(target.columns, range(len(target.columns))))[tuple(keys)] if is_df(target) else None
+    else:
+        keys = ids = None
     target, band, unit, covariances, risks, weights, data , mult , mult_band = _subset([target, band, unit, covariances, risks, weights, data , mult , mult_band], ids = ids, keys = keys)
     return _multibuffer(target = target, band = band, unit = unit, covariances = covariances, risks = risks, weights = weights, data = data, mult = mult, mult_band = mult_band)
 
