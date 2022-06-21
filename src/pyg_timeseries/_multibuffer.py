@@ -132,7 +132,6 @@ def _multibuffer(target, band, unit, covariances, risks, weights, data = None, m
 
 _multibuffer.output = ['data', 'mult']
 
-@loop(dict)
 def _subset_multibuffer(subset, target, band, unit, covariances, risks, weights, data = None, mult = None, mult_band = 0.1):
     if is_nums(subset):
         ids = subset
@@ -144,7 +143,8 @@ def _subset_multibuffer(subset, target, band, unit, covariances, risks, weights,
     return _multibuffer(target = target, band = band, unit = unit, covariances = covariances, risks = risks, weights = weights, data = data, mult = mult, mult_band = mult_band)
 
 
-def multibuffer(target, band, unit, covariances, risks, weights, data = None, mult = None, mult_band = 0.1, subset = None):
+
+def multibuffer(target, band, unit, covariances, risks, weights, data = None, mult = None, mult_band = 0.1, subset = None, subset_mult = None):
     """
     Assumes 'a' is a vector of target positions 
     performs a buffering of a but aiming to target a given level of risk
@@ -158,9 +158,10 @@ def multibuffer(target, band, unit, covariances, risks, weights, data = None, mu
     >>> weights = get_data('data','long_only', item = 'rpz')
     >>> covariances = get_data('data','long_only', item = 'covariance_zero')
     >>> buffered_lots = get_data('data','long_only', item = 'buffered_lots')
+    >>> mult_band = 0.1
     >>> data = None ## output
     >>> mult = None ## output
-    
+    >>> subset = subsets    
     ## some stats
 
     >>> print(dictable(ticker = list(res.data.columns), new = list(tover(res.data).values), b = list(tover(buffered_lots).values)).do(f12))
@@ -182,13 +183,20 @@ def multibuffer(target, band, unit, covariances, risks, weights, data = None, mu
     """
     if is_df(risks) and is_df(target):
         risks = df_reindex(risks, target, method = 'ffill')
-    res = _subset_multibuffer(subset = subset, target = target, band = band, unit = unit, covariances = covariances, risks = risks, weights = weights, data = data, mult = mult, mult_band = mult_band)
     if isinstance(subset, dict):
-        rtn = Dict(mult = df_concat([r.mult for r in res.values()], list(subset.keys())), data = df_concat([r.data for r in res.values()]))
-        rtn = rtn[target.columns]
+        res = {key: _subset_multibuffer(subset = value, target = target, band = band, unit = unit, covariances = covariances, risks = risks, weights = weights, 
+                              data = data, mult = subset_mult[key] if is_df(subset_mult) else mult, mult_band = mult_band) for key, value in subset.items()}
+        rtn = Dict(subset_mult = df_concat([r.mult for r in res.values()], list(subset.keys())), 
+                   data = df_concat([r.data for r in res.values()]),
+                   mult = df_concat(sum([[res[s].mult] * len(subset[s]) for s in subset], []), sum(subset.values(), [])))
+        rtn['data'] = rtn['data'][target.columns]
+        rtn['mult'] = rtn['mult'][target.columns]
         return rtn
     else:
-        return res
+        res = _subset_multibuffer(subset = subset, target = target, band = band, unit = unit, covariances = covariances, risks = risks, weights = weights, 
+                              data = data, mult = mult, mult_band = mult_band)
+        res['subset_mult'] = None
+    return res
 
-multibuffer.output = _multibuffer.output
+multibuffer.output = _multibuffer.output + ['subset_mult']
 

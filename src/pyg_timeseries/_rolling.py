@@ -313,17 +313,6 @@ def _buffer(a, band, unit = 0.0, pos = 0):
             res[i] = pos
     return res, pos
 
-def _singlstep
-
-
-def _multibuffer(a, band, unit, pos, covariances, risks, weights):
-    """
-    Assumes 'a' is a vector of target positions 
-    performs a buffering of a but aiming to target a given level of risk
-    """
-    
-    
-
 
 
 @loop_all
