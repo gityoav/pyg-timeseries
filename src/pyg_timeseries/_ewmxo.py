@@ -1,4 +1,4 @@
-from pyg_base import Dict, is_num, sub_, div_
+from pyg_base import Dict, is_num, sub_, div_, is_pd, is_dict
 from pyg_timeseries._ewm import ewma_, ewmstd_, ewmrms_
 from pyg_timeseries._rolling import v2na, diff_
 from pyg_timeseries._expanding import cumsum_
@@ -57,7 +57,7 @@ def ou_factor(fast, slow):
     return (F2/(1-F2) + S2/(1-S2) - 2*F*S/(1-F*S)) ** 0.5
 
 
-def ewmxo_(rtn, fast, slow, vol = None, time = None, instate = None):
+def ewmxo_(rtn, fast, slow, vol = None, time = None, instate = None, rms = True):
     """
     This is the normalized crossover function
 
@@ -91,7 +91,17 @@ def ewmxo_(rtn, fast, slow, vol = None, time = None, instate = None):
     ts = cumsum_(rtn, instate = state.get('cumsum'))
     fast_ewma_ = ewma_(ts.data, fast, time = time, instate = state.get('fast'))
     slow_ewma_ = ewma_(ts.data, slow, time = time, instate = state.get('slow'))
-    vol_ = ewmstd_(rtn, vol, time = time, instate = state.get('vol')) if is_num(vol) else vol
+    if vol is None:
+        vol_ = Dict(data = 1, state = None) ## do not divide by vol
+    elif is_num(vol):
+        vol_ = (ewmrms_ if rms else ewmstd_)(rtn, vol, time = time, instate = state.get('vol'))
+    elif is_pd(vol):
+        vol_ = Dict(data = vol, state = None)
+    elif is_dict(vol):
+        vol_ = vol
+    else:
+        raise ValueError('vol not recognised %s'%vol)
+    #vol_ = ewmstd_(rtn, vol, time = time, instate = state.get('vol')) if is_num(vol) else vol
     signal = sub_(fast_ewma_.data, slow_ewma_.data)
     normalized = div_(signal, v2na(vol_.data) * ou_factor(fast, slow))
     return Dict(data = normalized, state = Dict(fast = fast_ewma_.state, 
@@ -100,6 +110,9 @@ def ewmxo_(rtn, fast, slow, vol = None, time = None, instate = None):
 
 ewmxo_.output = ['data', 'state']
 
+
+
+    
 
 def ewmacd_(ts, fast, slow, vol = None, time = None, instate = None, rms = True):
     """
@@ -135,7 +148,16 @@ def ewmacd_(ts, fast, slow, vol = None, time = None, instate = None, rms = True)
     fast_ewma_ = ewma_(ts, fast, time = time, instate = state.get('fast'))
     slow_ewma_ = ewma_(ts, slow, time = time, instate = state.get('slow'))
     rtn_ = diff_(ts, 1, time = time, instate = state.get('diff'))
-    vol_ = (ewmrms_ if rms else ewmstd_)(rtn_.data, vol, time = time, instate = state.get('vol')) if is_num(vol) else vol
+    if vol is None:
+        vol_ = Dict(data = 1, state = None) ## do not divide by vol
+    elif is_num(vol):
+        vol_ = (ewmrms_ if rms else ewmstd_)(rtn_.data, vol, time = time, instate = state.get('vol'))
+    elif is_pd(vol):
+        vol_ = Dict(data = vol, state = None)
+    elif is_dict(vol):
+        vol_ = vol
+    else:
+        raise ValueError('vol not recognised %s'%vol)
     signal = fast_ewma_.data - slow_ewma_.data
     normalized = div_(signal, v2na(vol_.data) * ou_factor(fast, slow))
     return Dict(data = normalized, state = Dict(fast = fast_ewma_.state, 
