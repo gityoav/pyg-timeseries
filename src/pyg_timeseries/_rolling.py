@@ -397,6 +397,35 @@ def _shift1(a, vec):
 ###############
 
 
+@loop_all
+@pd2np
+@compiled
+def _rolling_tover(a, n = 256, interval = None, positions = None, trades = None, j = 0, total_variance = 0, total_trades = 0):
+    if interval is None:
+        interval = 1 / DAYS_PER_YEAR
+    v = np.empty_like(a)
+    prev = positions[j]
+    total_years = n * interval
+    for i in range(a.shape[0]):
+        jj = (j + 1) % n ## this is the position we want to be removing        
+        if np.isnan(a[i]):
+            positions[j] = prev
+        else:
+            positions[j] = a[i]
+        trades[j] = abs(positions[j] - prev)
+        total_variance += positions[j] ** 2 - positions[jj] ** 2
+        total_trades += (trades[j] - trades[jj])        
+        annual_variance = (total_variance * interval) / total_years
+        annual_trading = total_trades / total_years
+        if annual_variance <= 0:
+            v[i] = np.nan
+        else:
+            v[i] = annual_trading / (annual_variance ** 0.5)
+        prev = positions[j]
+        j = jj
+    return v, positions, trades, j, total_variance, total_trades
+
+
 @pd2np
 @compiled
 def _rolling_mean(a, n, time, t0, t1, vec, i, denom, t = np.nan):
@@ -778,18 +807,21 @@ def diff_(a, n=1, time = None, axis = 0, data = None, instate = None):
 
 diff_.output = ['data', 'state']
 
-def buffer_(a, band, unit = 0.0, data = None, instate = None):
+def buffer_(a, band, unit = 0.0, data = None, instate = None, rms = None):
     if is_num(instate):
         instate = Dict(pos = instate)
     elif instate is None:
         instate = Dict(pos = 0.0)
     if is_num(band):
         band = np.full(a.shape, band)
+    if is_num(rms):
+        r = rolling_rms(a, rms)
+        band = band * 2 * np.exp(-abs(a)/r)
     return _data_state(['data', 'pos'], _buffer(a = a, band = band, unit = unit, **instate))
         
 buffer_.output = ['data', 'state']
 
-def buffer(a, band, unit = 0.0, data = None, state = None):
+def buffer(a, band, unit = 0.0, data = None, state = None, rms = None):
     """
     buffer performs two functions:
         - ensures the result is stated in 'units' so if unit == 1, output is integers
@@ -817,6 +849,9 @@ def buffer(a, band, unit = 0.0, data = None, state = None):
         band = np.full(a.shape, band)
     if is_pd(band) and is_pd(a):
         band = df_reindex(band, a, method = 'ffill')
+    if is_num(rms):
+        r = rolling_rms(a, rms)
+        band = band * 2 * np.exp(-abs(a)/r)
     return first_(_buffer(a = a, band = band, unit = unit, **state))
     
         
@@ -920,6 +955,21 @@ def ratio_(a, n=1, time = None, axis = 0, data = None, instate = None):
         return _data_state(['data', 'vec', 'i', 't'], _tratio(a, n, time = time, **state))
 
 ratio_.output = ['data', 'state']
+
+DAYS_PER_YEAR = 260
+def rolling_tover(a, n = 256, data = None, state = None, interval = None):
+    if interval is None:
+        if is_pd(a) and len(a) > 2:
+            elapsed = a.index[-1] - a.index[0]
+            total_years = elapsed.days / 365
+            interval = total_years / (len(a) - 1) 
+        else:
+            interval = 1 / DAYS_PER_YEAR
+    if state is None:
+        state = Dict(j = 0, total_variance = 0, total_trades = 0, positions = None, trades = None)
+    state.positions = _vec(a, state.positions, n, 0.)
+    state.trades = _vec(a, state.trades, n, 0.)
+    return first_(_rolling_tover(a = a , n = n, interval = interval, **state))
 
 
 def rolling_mean(a, n, time = None, axis = 0, data = None, state = None):
