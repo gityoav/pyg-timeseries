@@ -356,7 +356,7 @@ def ewmcorr_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'oute
         res, a0, a1, a2, aa0, aa1, w2 = _ewmcorr(arr, n, min_sample = min_sample, bias = bias, **state)
         if res.shape[1] == 2:
             res = res[:, 0, 1]
-        return dict(data = res, state = dict(a0=a0, a1=a1, a2=a2, aa0=aa0, aa1=aa1, w2 = w2))
+        return dict(data = res, index = None, columns = None, state = dict(a0=a0, a1=a1, a2=a2, aa0=aa0, aa1=aa1, w2 = w2))
     elif is_df(arr):
         index = arr.index
         columns = list(arr.columns)
@@ -364,14 +364,13 @@ def ewmcorr_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'oute
         state = dict(a0=a0, a1=a1, a2=a2, aa0=aa0, aa1=aa1, w2 = w2)
         if arr.shape[1] == 2:
             res = pd.Series(res[:,0,1], index)
-            return dict(data = res, state = state)
+            return dict(data = res, columns = None, index = index, state = state)
         else:
-            ds = dict(data = res, columns = columns, index = index)
-            return dict(data = ds, state = state)
+            return dict(data = res, columns = columns, index = index, state = state)
     else:
         raise ValueError('unsure how to calculate correlation matrix for a %s'%a)
 
-ewmcorr_.output = ['data', 'state']
+ewmcorr_.output = ['data', 'state', 'index', 'columns']
 
 
 def ewmcorr(a, n, min_sample = 0.25, bias = False, instate = None, join = 'outer', method = None):

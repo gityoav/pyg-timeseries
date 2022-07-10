@@ -1,6 +1,6 @@
-from pyg_base import df_reindex, is_df, pd2np, loop, Dict, is_nums, is_pd, is_arr, df_concat, is_series, is_strs, dt
+from pyg_base import df_reindex, is_df, pd2np, loop, Dict, is_nums, is_pd, is_arr, is_num, df_concat, is_series, is_strs, dt, is_tss
 from pyg_timeseries._linalg import matmul
-from pyg_timeseries._rolling import buffer
+from pyg_timeseries._rolling import buffer, ffill, v2na
 import numpy as np
 from functools import partial
 
@@ -43,7 +43,7 @@ def bisect(f, lb, ub, n = 0, aim = np.nan):
         return ub
 
 
-def _single_step_multibuffer(target, band, weights, vol, covariances, previous, unit = 1.0, prev_m = 1.0, risk_band = 0.1):    
+def _single_step_multibuffer(target, band, point_values, vol, correlations, previous, unit = 1.0, prev_m = 1.0, risk_band = 0.1):    
     """
     Since actual positions are discrete while the target positions can be a fraction, 
     _single_step_multibuffer adjusts the target risk using a multiplier so that the realised (integer valued) buffered positions match the overall risk within [1-risk_band, 1+risk_band]
@@ -54,11 +54,11 @@ def _single_step_multibuffer(target, band, weights, vol, covariances, previous, 
         target positions
     - band : float
         bands for the target positions of individual markets (see buffer function)
-    - weights : array
-        a multiplier per each position. This is useful if for example, a unit position in a market actually corresponds to much higher value (e.g. in Futures, weights will be fx_rate * full_point_value)
+    - point_values : array
+        a multiplier per each position. This is useful if for example, a unit position in a market actually corresponds to much higher value (e.g. in Futures, point_values will be fx_rate * full_point_value)
     - vol: array
         price volatility
-    - covariances: 
+    - correlations: 
         actually, correlations between the markets
     - previous: array
         previous integer valued positions
@@ -72,8 +72,8 @@ def _single_step_multibuffer(target, band, weights, vol, covariances, previous, 
         
     :Example:
     ---------
-    >>> covariances = np.array([[1,0.3], [0.3, 1]])
-    >>> weights = np.array([0.5, 0.5])
+    >>> correlations = np.array([[1,0.3], [0.3, 1]])
+    >>> point_values = np.array([0.5, 0.5])
     >>> vol = np.array([1.2, 4.3])
     >>> mult = 3
     >>> target = np.array([0.3, 0.8]) ## current target positions
@@ -89,8 +89,9 @@ def _single_step_multibuffer(target, band, weights, vol, covariances, previous, 
     >>> u = list(unit)
     
     """
-    w = np.matmul(np.array([weights * vol]).T, np.array([weights * vol]))
-    cw = covariances * w
+    pv = point_values * vol
+    w = np.matmul(np.array([pv]).T, np.array([pv]))
+    cw = correlations * w
     cw[np.isnan(cw)] = 0.0
     target[np.isnan(target)] = 0.0
     target_risk = matmul(cw, target, target, 0.5)
@@ -116,15 +117,26 @@ def _single_step_multibuffer(target, band, weights, vol, covariances, previous, 
     buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit)[0]
     mismatch = _mismatch(buffered_pos)
 
-    if mismatch < 1 - risk_band:
+    if mismatch < - risk_band:
         function = partial(do_buffer_and_calculate_mismatch, target_mismatch = 1 - risk_band) ## we need to drive up risk but only to 1-risk_band
         m = bisect(function, lb = prev_m, ub = prev_m + risk_band, n = 5, aim = prev_m)        
         buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit)[0]
+        # m = prev_m * (1 - risk_band) / mismatch
+        mismatch = _mismatch(buffered_pos)
+        if mismatch > risk_band:
+            m = prev_m
+            buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit)[0]
+            
 
-    elif mismatch > 1 + risk_band:
+    elif mismatch > risk_band:
         function = partial(do_buffer_and_calculate_mismatch, target_mismatch = 1 + risk_band)
         m = bisect(function, lb = prev_m - risk_band, ub = prev_m, n = 5, aim = prev_m)                
+        # m = prev_m * (1 + risk_band) / mismatch
         buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit)[0]
+        mismatch = _mismatch(buffered_pos)
+        if mismatch < - risk_band:
+            m = prev_m
+            buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit)[0]
     
     return m, buffered_pos, _mismatch(buffered_pos)
 
@@ -160,7 +172,7 @@ def _subset(value, keys = None, ids = None):
     
 
 @pd2np
-def _multibuffer(target, band, unit, covariances, risks, weights, data = None, mult = None, mismatch = None, risk_band = 0.1):
+def _multibuffer(target, band, unit, correlations, volatilities, point_values, data = None, mult = None, mismatch = None, risk_band = 0.1):
     if data is None:
         previous = np.zeros(target.shape[1])
         m = 1
@@ -171,14 +183,16 @@ def _multibuffer(target, band, unit, covariances, risks, weights, data = None, m
         t = len(target)
         if n == t:
             return Dict(mult = mult, data = data)
-        target, band, unit, covariances, risks, weights = _from([target, band, unit, covariances, risks, weights], n = n, t = t)
+        target, band, unit, correlations, volatilities, point_values = _from([target, band, unit, correlations, volatilities, point_values], n = n, t = t)
     ds = np.zeros(target.shape)
     ms = np.ones(target.shape[0])
     mismatches = np.zeros(target.shape)
     t0 = dt()
     for i in range(target.shape[0]):
-        m, previous, match = _single_step_multibuffer(target = target[i], band = band[i], weights = weights[i], vol = risks[i], 
-                                               covariances = covariances[i], previous = previous, unit = unit, prev_m = m, risk_band = risk_band)
+        m, previous, match = _single_step_multibuffer(target = target[i], 
+                                                      band = band if is_num(band) else band[i], 
+                                                      point_values = point_values[i], vol = volatilities[i], 
+                                               correlations = correlations[i], previous = previous, unit = unit, prev_m = m, risk_band = risk_band)
         ds[i] = previous
         ms[i] = m
         mismatches[i] = match
@@ -193,7 +207,7 @@ def _multibuffer(target, band, unit, covariances, risks, weights, data = None, m
 
 _multibuffer.output = ['data', 'mult', 'mismatch']
 
-def _subset_multibuffer(subset, target, band, unit, covariances, risks, weights, data = None, mult = None, mismatch = None, risk_band = 0.1):
+def _subset_multibuffer(subset, target, band, unit, correlations, volatilities, point_values, data = None, mult = None, mismatch = None, risk_band = 0.1):
     if is_nums(subset):
         ids = subset
         keys = target.columns[ids] if is_df(target) else None
@@ -202,15 +216,47 @@ def _subset_multibuffer(subset, target, band, unit, covariances, risks, weights,
         ids = Dict(zip(target.columns, range(len(target.columns))))[tuple(keys)] if is_df(target) else None
     else:
         keys = ids = None
-    target, band, unit, covariances, risks, weights, data , mult, mismatch, risk_band = _subset([target, band, unit, covariances, risks, weights, data, mult, mismatch, risk_band], ids = ids, keys = keys)
-    return _multibuffer(target = target, band = band, unit = unit, covariances = covariances, risks = risks, weights = weights, data = data, mult = mult, mismatch = mismatch, risk_band = risk_band)
+    target, band, unit, correlations, volatilities, point_values, data , mult, mismatch, risk_band = _subset([target, band, unit, correlations, volatilities, point_values, data, mult, mismatch, risk_band], ids = ids, keys = keys)
+    return _multibuffer(target = target, band = band, unit = unit, correlations = correlations, volatilities = volatilities, point_values = point_values, data = data, mult = mult, mismatch = mismatch, risk_band = risk_band)
 
 
+@loop(tuple)
+def _to_target(value, target = None):
+    if isinstance(value, list) and is_tss(value):
+        value = df_concat(value)
+    if is_df(target) and is_df(value):
+        value = ffill(df_reindex(value, target))
+    return value
+        
 
-def multibuffer(target, band, unit, covariances, risks, weights, data = None, mult = None, mismatch = None, risk_band = 0.1, subset = None, subset_mult = None, subset_mismatch = None):
+def multibuffer(target, band, unit, correlations, volatilities, point_values, data = None, mult = None, mismatch = None, risk_band = 0.1, subset = None, subset_mult = None, subset_mismatch = None):
     """
-    Assumes 'a' is a vector of target positions 
-    performs a buffering of a but aiming to target a given level of risk
+
+    performs a buffering of a target position but aiming to target a given level of risk
+    
+    TargetRisk is assumed to be given as 
+    
+    single_position_volatilities = target * point_values * volatilities
+    portfolio_risk = single_position_volatilities^T x  correlations x single_position_volatilities
+
+    first_attempt = buffer(target, band = band / (volatilities * point_values))
+    
+    EXCEPT
+    
+    first_attempt_risk = 
+    
+    
+    :Parameters:
+    ------------
+    - target: df
+        The target position
+    
+    - band: float/df
+        The buffer on the position. See single buffer function for explanation
+    
+    - 
+        
+        
     
     :Example:
     ---------
@@ -218,16 +264,16 @@ def multibuffer(target, band, unit, covariances, risks, weights, data = None, mu
     >>> target = get_data('data','long_only', item = 'lots') ## grab original target lots per each asset over time
     >>> band = get_data('data','long_only', item = 'band')
     >>> unit = 1.0
-    >>> risks = get_data('data','long_only', item = 'fut_vol')
-    >>> weights = get_data('data','long_only', item = 'rpz')
-    >>> covariances = get_data('data','long_only', item = 'covariance_zero')
+    >>> volatilities = get_data('data','long_only', item = 'fut_vol')
+    >>> point_values = get_data('data','long_only', item = 'rpz')
+    >>> correlations = get_data('data','long_only', item = 'covariance_zero')
     >>> buffered_lots = get_data('data','long_only', item = 'buffered_lots')
     >>> risk_band = 0.1
     >>> data = None ## output
     >>> mult = None ## output
     >>> subset = None
     
-    >>> res = multibuffer(target, band, unit, covariances, risks, weights, data = data, mult = mult, risk_band = risk_band, subset = subset)
+    >>> res = multibuffer(target, band, unit, correlations, volatilities, point_values, data = data, mult = mult, risk_band = risk_band, subset = subset)
 
 
     
@@ -246,29 +292,35 @@ def multibuffer(target, band, unit, covariances, risks, weights, data = None, mu
                         
     :Example:
     ---------
-    >>> res = multibuffer(target, band, unit, covariances, risks, weights, data = data, mult = mult, risk_band = risk_band, subset = ['TYA Comdty', 'ESA Index'])
+    >>> res = multibuffer(target, band, unit, correlations, volatilities, point_values, data = data, mult = mult, risk_band = risk_band, subset = ['TYA Comdty', 'ESA Index'])
     
     
     """
-    if is_df(risks) and is_df(target):
-        risks = df_reindex(risks, target, method = 'ffill')
+    target = _to_target(target)
+    volatilities, point_values, band = _to_target((volatilities, point_values, band), target)
     if isinstance(subset, dict):
-        res = {key: _subset_multibuffer(subset = value, target = target, band = band, unit = unit, covariances = covariances, risks = risks, weights = weights, 
-                              data = data, 
-                              mult = subset_mult[key] if is_df(subset_mult) else mult, 
-                              mismatch = subset_mismatch[key] if is_df(subset_mismatch) else subset_mismatch, 
-                              risk_band = risk_band) for key, value in subset.items()}
-        rtn = Dict(subset_mult = df_concat([r.mult for r in res.values()], list(subset.keys())),
-                   subset_mismatch = df_concat([r.mismatch for r in res.values()], list(subset.keys())),
+        res = {}
+        for key in subset:
+            value = subset[key]
+            print('running', key, 'for', value)
+            res[key] = _subset_multibuffer(subset = value, target = target, band = band, unit = unit, correlations = correlations, 
+                                           volatilities = volatilities, 
+                                           point_values = point_values, 
+                                           data = data, 
+                                           mult = subset_mult[key] if is_df(subset_mult) else mult, 
+                                           mismatch = subset_mismatch[key] if is_df(subset_mismatch) else subset_mismatch, 
+                                           risk_band = risk_band)
+        rtn = Dict(subset_mult = df_concat([r.mult for r in res.values()], list(res.keys())),
+                   subset_mismatch = df_concat([r.mismatch for r in res.values()]),
                    data = df_concat([r.data for r in res.values()]),
                    mult = df_concat(sum([[res[s].mult] * len(subset[s]) for s in subset], []), sum(subset.values(), [])),
-                   mismatch = df_concat(sum([[res[s].mismatch] * len(subset[s]) for s in subset], []), sum(subset.values(), [])))
+                   mismatch = df_concat([r.mismatch for r in res.values()]))
         rtn['data'] = rtn['data'][target.columns]
         rtn['mult'] = rtn['mult'][target.columns]
         rtn['mismatch'] = rtn['mismatch'][target.columns]
         return rtn
     else:
-        res = _subset_multibuffer(subset = subset, target = target, band = band, unit = unit, covariances = covariances, risks = risks, weights = weights, 
+        res = _subset_multibuffer(subset = subset, target = target, band = band, unit = unit, correlations = correlations, volatilities = volatilities, point_values = point_values, 
                               data = data, mult = mult, mismatch = mismatch, risk_band = risk_band)
         res['subset_mult'] = None
         res['subset_mismatch'] = None
