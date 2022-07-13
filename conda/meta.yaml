@@ -12,11 +12,11 @@ build:
 
 requirements:
     build:
-        - pyg-base      >=0.0.17
+        - pyg-base      >=0.0.19
         - numba         >=0.48.0
         - bottleneck    >=1.3.2
     run:
-        - pyg-base      >=0.0.17
+        - pyg-base      >=0.0.19
         - numba         >=0.48.0
         - bottleneck    >=1.3.2
 
