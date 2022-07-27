@@ -402,7 +402,7 @@ def _shift1(a, vec):
 @compiled
 def _rolling_tover(a, n = 256, interval = None, positions = None, trades = None, j = 0, total_variance = 0, total_trades = 0):
     if interval is None:
-        interval = 1 / DAYS_PER_YEAR
+        interval = 1 / 260
     v = np.empty_like(a)
     prev = positions[j]
     total_years = n * interval
@@ -956,7 +956,6 @@ def ratio_(a, n=1, time = None, axis = 0, data = None, instate = None):
 
 ratio_.output = ['data', 'state']
 
-DAYS_PER_YEAR = 260
 def rolling_tover(a, n = 256, data = None, state = None, interval = None):
     if interval is None:
         if is_pd(a) and len(a) > 2:
@@ -964,7 +963,7 @@ def rolling_tover(a, n = 256, data = None, state = None, interval = None):
             total_years = elapsed.days / 365
             interval = total_years / (len(a) - 1) 
         else:
-            interval = 1 / DAYS_PER_YEAR
+            interval = 1 / 260
     if state is None:
         state = Dict(j = 0, total_variance = 0, total_trades = 0, positions = None, trades = None)
     state.positions = _vec(a, state.positions, n, 0.)

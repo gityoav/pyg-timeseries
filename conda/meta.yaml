@@ -1,6 +1,6 @@
 package:
     name: pyg-timeseries
-    version: 0.0.9
+    version: 0.0.11
 
 source:
     path: ../src
