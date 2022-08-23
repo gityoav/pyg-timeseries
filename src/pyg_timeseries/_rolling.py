@@ -286,9 +286,11 @@ def _diff1(a, vec, time, i = 0, t = np.nan):
 @compiled
 def _buffer(a, band, unit = 0.0, pos = 0):
     """
+    >>> from pyg import *
     >>> a = pd.Series(cumsum(np.random.normal(0,1,1000)), drange(-999))
-    >>> ts, pos = _buffer(a, 1, 3, 0)
-    >>> df_concat([a,ts])[dt(-100):].plot()
+    >>> signal = ewmacd(a, 1, 3, vol = 10)
+    >>> pos = buffer(signal, 0.5, unit = 0.5)
+    >>> df_concat([signal, pos], ['orig', 'buffered'])[dt(-100):].plot()
     """
     res = np.full(a.shape, np.nan)
     b = 0.0
@@ -304,12 +306,16 @@ def _buffer(a, band, unit = 0.0, pos = 0):
                     pos = np.round(pos / unit) * unit
                     if pos < a[i] - b and pos + unit < a[i] + b:
                         pos += unit
+                    elif pos > a[i] + b:
+                        pos -= unit
             elif pos > a[i] + b:
                 pos = a[i] + b
                 if unit > 0:
                     pos = np.round(pos / unit) * unit
                     if pos > a[i] + b and pos - unit > a[i] - b:
                         pos -= unit
+                    elif pos < a[i] - b:
+                        pos += unit
             res[i] = pos
     return res, pos
 
