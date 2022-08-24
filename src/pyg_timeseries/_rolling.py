@@ -288,9 +288,11 @@ def _buffer(a, band, unit = 0.0, pos = 0):
     """
     >>> from pyg import *
     >>> a = pd.Series(cumsum(np.random.normal(0,1,1000)), drange(-999))
-    >>> signal = ewmacd(a, 1, 3, vol = 10)
-    >>> pos = buffer(signal, 0.5, unit = 0.5)
-    >>> df_concat([signal, pos], ['orig', 'buffered'])[dt(-100):].plot()
+    >>> signal = ewmacd(a, 16, 48, vol = 18)
+    >>> band = 0.15; unit = 1
+    >>> buffered = buffer(signal, band = band, unit = unit)
+    >>> sim = np.round(buffer(signal, band = band) / unit) * unit
+    >>> df_concat([signal, sim, buffered], ['signal %i'%tover(signal), 'sim %i'%tover(sim), 'buffered %i'%tover(buffered), ])[dt(-1200):].plot()
     """
     res = np.full(a.shape, np.nan)
     b = 0.0
@@ -301,21 +303,29 @@ def _buffer(a, band, unit = 0.0, pos = 0):
             if not np.isnan(band[i]): ## we forward fill band
                 b = band[i]
             if pos < a[i] - b:
-                pos = a[i] - b
+                aim = a[i] - b
                 if unit > 0:
-                    pos = np.round(pos / unit) * unit
-                    if pos < a[i] - b and pos + unit < a[i] + b:
-                        pos += unit
-                    elif pos > a[i] + b:
-                        pos -= unit
+                    aim = np.round(aim / unit) * unit
+                    if aim < a[i] - b and aim + unit < a[i] + b:
+                        pos = aim + unit
+                    elif aim > a[i] + b and (aim - a[i]) - (a[i] - pos) < b/2:
+                        pos = aim - unit
+                    else:
+                        pos = aim
+                else:
+                    pos = aim
             elif pos > a[i] + b:
-                pos = a[i] + b
+                aim = a[i] + b
                 if unit > 0:
-                    pos = np.round(pos / unit) * unit
-                    if pos > a[i] + b and pos - unit > a[i] - b:
-                        pos -= unit
-                    elif pos < a[i] - b:
-                        pos += unit
+                    aim = np.round(aim / unit) * unit
+                    if aim > a[i] + b and aim - unit > a[i] - b:
+                        pos = aim - unit
+                    elif aim < a[i] - b and (a[i] - aim) - (pos - a[i]) < b/2:
+                        pos = aim + unit
+                    else:
+                        pos = aim
+                else:
+                    pos = aim
             res[i] = pos
     return res, pos
 
