@@ -284,24 +284,26 @@ def _diff1(a, vec, time, i = 0, t = np.nan):
 @loop_all
 @pd2np
 @compiled
-def _buffer(a, band, unit = 0.0, pos = 0):
+def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0.5):
     """
     
     Handles buffering when the rounding into units may be significant cost
     
     
-    >>> from pyg import *
+    >>> from pyg import *; from pysys import *
     >>> a = pd.Series(cumsum(np.random.normal(0,1,1000)), drange(-999))
-    >>> signal = ewmacd(a, 1, 3, vol = 18)
-    >>> band = 0.1; unit = 1.5
-    >>> buffered = buffer(signal, band = band, unit = unit)
+    >>> signal = ewmacd(a, 8, 24, vol = 18)
+    >>> band = 0.1; unit = 1.5; rounding_band = 0.5
+    >>> buffered = buffer(signal, band = band, unit = unit, rounding_band = rounding_band )
     >>> sim = np.round(buffer(signal, band = band) / unit) * unit
-    >>> df_concat([signal, sim, buffered], ['signal %i'%tover(signal), 'sim %i'%tover(sim), 'buffered %i'%tover(buffered), ])[dt(-200):].plot()
+    >>> df_concat([signal, sim, buffered], ['signal %i'%tover(signal), 'sim %i'%tover(sim), 'buffered %i'%tover(buffered), ])[dt(-600):].plot(title = f'band ={band}, unit ={unit}, rounding = {rounding_band}')
     """
     res = np.full(a.shape, np.nan)
     b = 0.0
+    rounding_unit = rounding_band * unit
     if np.isnan(pos):
         pos = 0.0
+    
     for i in range(a.shape[0]):
         if not np.isnan(a[i]):
             if not np.isnan(band[i]): ## we forward fill band
@@ -310,9 +312,7 @@ def _buffer(a, band, unit = 0.0, pos = 0):
                 aim = a[i] - b
                 if unit > 0:
                     aim = np.round(aim / unit) * unit
-                    if aim < a[i] - b and aim + unit < a[i] + b:
-                        pos = aim + unit
-                    elif aim > a[i] + b and (aim - a[i]) - (a[i] - pos) < min(b, unit/3):
+                    if aim > a[i] and (a[i] - pos) - (aim - a[i])  < rounding_unit :
                         pos = aim - unit
                     else:
                         pos = aim
@@ -322,9 +322,7 @@ def _buffer(a, band, unit = 0.0, pos = 0):
                 aim = a[i] + b
                 if unit > 0:
                     aim = np.round(aim / unit) * unit
-                    if aim > a[i] + b and aim - unit > a[i] - b:
-                        pos = aim - unit
-                    elif aim < a[i] - b and (a[i] - aim) - (pos - a[i]) < min(b, unit/3):
+                    if aim < a[i] and (pos - a[i]) - (a[i] - aim)  < rounding_unit :
                         pos = aim + unit
                     else:
                         pos = aim
@@ -332,7 +330,6 @@ def _buffer(a, band, unit = 0.0, pos = 0):
                     pos = aim
             res[i] = pos
     return res, pos
-
 
 
 @loop_all
@@ -827,7 +824,7 @@ def diff_(a, n=1, time = None, axis = 0, data = None, instate = None):
 
 diff_.output = ['data', 'state']
 
-def buffer_(a, band, unit = 0.0, data = None, instate = None, rms = None):
+def buffer_(a, band, unit = 0.0, rounding_band = 0.5, data = None, instate = None, rms = None):
     if is_num(instate):
         instate = Dict(pos = instate)
     elif instate is None:
@@ -837,11 +834,11 @@ def buffer_(a, band, unit = 0.0, data = None, instate = None, rms = None):
     if is_num(rms):
         r = rolling_rms(a, rms)
         band = band * 2 * np.exp(-abs(a)/r)
-    return _data_state(['data', 'pos'], _buffer(a = a, band = band, unit = unit, **instate))
+    return _data_state(['data', 'pos'], _buffer(a = a, band = band, unit = unit, rounding_band = rounding_band, **instate))
         
 buffer_.output = ['data', 'state']
 
-def buffer(a, band, unit = 0.0, data = None, state = None, rms = None):
+def buffer(a, band, unit = 0.0, rounding_band = 0.5, data = None, state = None, rms = None):
     """
     buffer performs two functions:
         - ensures the result is stated in 'units' so if unit == 1, output is integers
@@ -893,7 +890,7 @@ def buffer(a, band, unit = 0.0, data = None, state = None, rms = None):
     if is_num(rms):
         r = rolling_rms(a, rms)
         band = band * 2 * np.exp(-abs(a)/r)
-    return first_(_buffer(a = a, band = band, unit = unit, **state))
+    return first_(_buffer(a = a, band = band, unit = unit, rounding_band = rounding_band, **state))
     
         
 
