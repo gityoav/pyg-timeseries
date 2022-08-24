@@ -293,7 +293,7 @@ def _buffer(a, band, unit = 0.0, pos = 0):
     >>> from pyg import *
     >>> a = pd.Series(cumsum(np.random.normal(0,1,1000)), drange(-999))
     >>> signal = ewmacd(a, 1, 3, vol = 18)
-    >>> band = 0.15; unit = 1.5
+    >>> band = 0.1; unit = 1.5
     >>> buffered = buffer(signal, band = band, unit = unit)
     >>> sim = np.round(buffer(signal, band = band) / unit) * unit
     >>> df_concat([signal, sim, buffered], ['signal %i'%tover(signal), 'sim %i'%tover(sim), 'buffered %i'%tover(buffered), ])[dt(-200):].plot()
