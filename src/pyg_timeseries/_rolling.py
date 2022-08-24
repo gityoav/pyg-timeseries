@@ -286,13 +286,17 @@ def _diff1(a, vec, time, i = 0, t = np.nan):
 @compiled
 def _buffer(a, band, unit = 0.0, pos = 0):
     """
+    
+    Handles buffering when the rounding into units may be significant cost
+    
+    
     >>> from pyg import *
     >>> a = pd.Series(cumsum(np.random.normal(0,1,1000)), drange(-999))
-    >>> signal = ewmacd(a, 16, 48, vol = 18)
-    >>> band = 0.15; unit = 1
+    >>> signal = ewmacd(a, 1, 3, vol = 18)
+    >>> band = 0.15; unit = 1.5
     >>> buffered = buffer(signal, band = band, unit = unit)
     >>> sim = np.round(buffer(signal, band = band) / unit) * unit
-    >>> df_concat([signal, sim, buffered], ['signal %i'%tover(signal), 'sim %i'%tover(sim), 'buffered %i'%tover(buffered), ])[dt(-1200):].plot()
+    >>> df_concat([signal, sim, buffered], ['signal %i'%tover(signal), 'sim %i'%tover(sim), 'buffered %i'%tover(buffered), ])[dt(-200):].plot()
     """
     res = np.full(a.shape, np.nan)
     b = 0.0
@@ -308,7 +312,7 @@ def _buffer(a, band, unit = 0.0, pos = 0):
                     aim = np.round(aim / unit) * unit
                     if aim < a[i] - b and aim + unit < a[i] + b:
                         pos = aim + unit
-                    elif aim > a[i] + b and (aim - a[i]) - (a[i] - pos) < b/2:
+                    elif aim > a[i] + b and (aim - a[i]) - (a[i] - pos) < min(b, unit/3):
                         pos = aim - unit
                     else:
                         pos = aim
@@ -320,7 +324,7 @@ def _buffer(a, band, unit = 0.0, pos = 0):
                     aim = np.round(aim / unit) * unit
                     if aim > a[i] + b and aim - unit > a[i] - b:
                         pos = aim - unit
-                    elif aim < a[i] - b and (a[i] - aim) - (pos - a[i]) < b/2:
+                    elif aim < a[i] - b and (a[i] - aim) - (pos - a[i]) < min(b, unit/3):
                         pos = aim + unit
                     else:
                         pos = aim
@@ -842,7 +846,28 @@ def buffer(a, band, unit = 0.0, data = None, state = None, rms = None):
     buffer performs two functions:
         - ensures the result is stated in 'units' so if unit == 1, output is integers
         - slows down the trading to ensure we are always within [a-band, a+band] but does not change values while we are within the band
+
+
+    Explanation: rounding zone band
+    -----------
+    Handles buffering when the rounding into units may be significant part of the cost. 
+    Issue is: supppose unit = 1 and buffer = 0.1
     
+    a = [0.49, 0.51, 0.49], the rounding will switch to [0,1,0] 
+    while actually not gaining...
+    the rounded time series is always "0.49 from nearest"
+    
+    buffer is our tolerance of "being away from target" so... 
+    we should stay at 0 until switching to 1 benefits us at least 0.1
+    
+    It means the "no-trade zones" are:
+        - when we are within [target-band, target_band] : The "target zone band"
+        - when we are withing [0.5 of unit - band, 0.5 unit + band] : "The rounding zone band"
+    
+    This does mean that if the band is very wide viz a viz unit, we end up not trading at all!
+    So we impose rounding_band < min(band, unit/3)
+  
+  
     :Parameters:
     ------------
     a : array/timeseries
