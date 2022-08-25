@@ -298,7 +298,7 @@ def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0.5):
     for i in range(a.shape[0]):
         if not np.isnan(a[i]):
             if not np.isnan(band[i]): ## we forward fill band
-                b = np.max(band[i], floor)
+                b = max(band[i], floor)
             if pos < a[i] - b:
                 pos = a[i] - b
             elif pos > a[i] + b:
