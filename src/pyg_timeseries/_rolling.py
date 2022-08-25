@@ -290,45 +290,22 @@ def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0.5):
     Handles buffering when the rounding into units may be significant cost
     
     
-    >>> from pyg import *; from pysys import *
-    >>> a = pd.Series(cumsum(np.random.normal(0,1,1000)), drange(-999))
-    >>> signal = ewmacd(a, 8, 24, vol = 18)
-    >>> band = 0.1; unit = 1.5; rounding_band = 0.5
-    >>> buffered = buffer(signal, band = band, unit = unit, rounding_band = rounding_band )
-    >>> sim = np.round(buffer(signal, band = band) / unit) * unit
-    >>> df_concat([signal, sim, buffered], ['signal %i'%tover(signal), 'sim %i'%tover(sim), 'buffered %i'%tover(buffered), ])[dt(-600):].plot(title = f'band ={band}, unit ={unit}, rounding = {rounding_band}')
     """
     res = np.full(a.shape, np.nan)
-    b = 0.0
-    rounding_unit = rounding_band * unit
+    b = floor = rounding_band * unit
     if np.isnan(pos):
         pos = 0.0
-    
     for i in range(a.shape[0]):
         if not np.isnan(a[i]):
             if not np.isnan(band[i]): ## we forward fill band
-                b = band[i]
+                b = np.max(band[i], floor)
             if pos < a[i] - b:
-                aim = a[i] - b
-                if unit > 0:
-                    aim = np.round(aim / unit) * unit
-                    if aim > a[i] and (a[i] - pos) - (aim - a[i])  < rounding_unit :
-                        pos = aim - unit
-                    else:
-                        pos = aim
-                else:
-                    pos = aim
+                pos = a[i] - b
             elif pos > a[i] + b:
-                aim = a[i] + b
-                if unit > 0:
-                    aim = np.round(aim / unit) * unit
-                    if aim < a[i] and (pos - a[i]) - (a[i] - aim)  < rounding_unit :
-                        pos = aim + unit
-                    else:
-                        pos = aim
-                else:
-                    pos = aim
+                pos = a[i] + b
             res[i] = pos
+    if unit > 0:
+        pos = np.round(pos / unit) * unit
     return res, pos
 
 
