@@ -44,7 +44,7 @@ def bisect(f, lb, ub, n = 0, aim = np.nan):
         return ub
 
 
-def _single_step_multibuffer(target, band, point_values, vol, correlations, previous, unit = 1.0, prev_m = 1.0, risk_band = 0.1):    
+def _single_step_multibuffer(target, band, point_values, vol, correlations, previous, unit = 1.0, prev_m = 1.0, risk_band = 0.1, rounding_band = 0):    
     """
     Since actual positions are discrete while the target positions can be a fraction, 
     _single_step_multibuffer adjusts the target risk using a multiplier so that the realised (integer valued) buffered positions match the overall risk within [1-risk_band, 1+risk_band]
@@ -111,11 +111,11 @@ def _single_step_multibuffer(target, band, point_values, vol, correlations, prev
             return buffered_risk / target_risk - target_mismatch
         
         def do_buffer_and_calculate_mismatch(m, target_mismatch = 1.0):
-            buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit)[0]
+            buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit, rounding_band = rounding_band)[0]
             return _mismatch(buffered_pos, target_mismatch)
 
     m = prev_m
-    buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit)[0]
+    buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit, rounding_band = rounding_band)[0]
     mismatch = _mismatch(buffered_pos)
 
     if mismatch < - risk_band:
@@ -126,18 +126,18 @@ def _single_step_multibuffer(target, band, point_values, vol, correlations, prev
         mismatch = _mismatch(buffered_pos)
         if mismatch > risk_band:
             m = prev_m
-            buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit)[0]
+            buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit, rounding_band = rounding_band)[0]
             
 
     elif mismatch > risk_band:
         function = partial(do_buffer_and_calculate_mismatch, target_mismatch = 1 + risk_band)
         m = bisect(function, lb = prev_m - risk_band, ub = prev_m, n = 5, aim = prev_m)                
         # m = prev_m * (1 + risk_band) / mismatch
-        buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit)[0]
+        buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit, rounding_band = rounding_band)[0]
         mismatch = _mismatch(buffered_pos)
         if mismatch < - risk_band:
             m = prev_m
-            buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit)[0]
+            buffered_pos = buffer(a = np.array([target * m]), band = b, state = state, unit = unit, rounding_band = rounding_band)[0]
     
     return m, buffered_pos, _mismatch(buffered_pos)
 

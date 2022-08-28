@@ -284,7 +284,7 @@ def _diff1(a, vec, time, i = 0, t = np.nan):
 @loop_all
 @pd2np
 @compiled
-def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0.5):
+def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0):
     """
     
     Handles buffering when the rounding into units may be significant cost
@@ -801,7 +801,7 @@ def diff_(a, n=1, time = None, axis = 0, data = None, instate = None):
 
 diff_.output = ['data', 'state']
 
-def buffer_(a, band, unit = 0.0, rounding_band = 0.5, data = None, instate = None, rms = None):
+def buffer_(a, band, unit = 0.0, rounding_band = 0., data = None, instate = None, rms = None):
     if is_num(instate):
         instate = Dict(pos = instate)
     elif instate is None:
@@ -815,7 +815,7 @@ def buffer_(a, band, unit = 0.0, rounding_band = 0.5, data = None, instate = Non
         
 buffer_.output = ['data', 'state']
 
-def buffer(a, band, unit = 0.0, rounding_band = 0.5, data = None, state = None, rms = None):
+def buffer(a, band, unit = 0.0, rounding_band = 0., data = None, state = None, rms = None):
     """
     buffer performs two functions:
         - ensures the result is stated in 'units' so if unit == 1, output is integers
