@@ -314,8 +314,11 @@ def _diff1(a, vec, time, i = 0, t = np.nan):
 @compiled
 def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0):
     """
+    >>> from pyg import * 
     >>> a = pd.Series(cumsum(np.random.normal(0,1,1000)), drange(-999))
-    >>> ts, pos = _buffer(a, 1, 3, 0)
+    >>> sig = ewmacd(a, 4, 12, vol = 18)
+    >>> sig.plot()
+    >>> ts = buffer(sig, band = 0.1, unit = 1, rounding_band = 0)
     >>> df_concat([a,ts])[dt(-100):].plot()
     """
     res = np.full(a.shape, np.nan)
