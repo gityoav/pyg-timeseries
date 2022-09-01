@@ -281,33 +281,67 @@ def _diff1(a, vec, time, i = 0, t = np.nan):
     return res, vec, i, t
 
 
+# @loop_all
+# @pd2np
+# @compiled
+# def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0):
+#     """
+    
+#     Handles buffering when the rounding into units may be significant cost
+    
+    
+#     """
+#     res = np.full(a.shape, np.nan)
+#     b = floor = rounding_band * unit
+#     if np.isnan(pos):
+#         pos = 0.0
+#     for i in range(a.shape[0]):
+#         if not np.isnan(a[i]):
+#             if not np.isnan(band[i]): ## we forward fill band
+#                 b = max(band[i], floor)
+#             if pos < a[i] - b:
+#                 pos = a[i] - b
+#             elif pos > a[i] + b:
+#                 pos = a[i] + b
+#             res[i] = pos
+#     if unit > 0:
+#         pos = np.round(pos / unit) * unit
+#     return res, pos
+
+
 @loop_all
 @pd2np
 @compiled
 def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0):
     """
-    
-    Handles buffering when the rounding into units may be significant cost
-    
-    
+    >>> a = pd.Series(cumsum(np.random.normal(0,1,1000)), drange(-999))
+    >>> ts, pos = _buffer(a, 1, 3, 0)
+    >>> df_concat([a,ts])[dt(-100):].plot()
     """
     res = np.full(a.shape, np.nan)
-    b = floor = rounding_band * unit
     if np.isnan(pos):
         pos = 0.0
     for i in range(a.shape[0]):
         if not np.isnan(a[i]):
-            if not np.isnan(band[i]): ## we forward fill band
-                b = max(band[i], floor)
+            b = band[i]
             if pos < a[i] - b:
                 pos = a[i] - b
+                if unit > 0:
+                    pos = np.round(pos / unit) * unit
+                    if pos < a[i] - b and pos + unit < a[i] + b:
+                        pos += unit
+                    # elif pos > a[i] + b:
+                    #     pos -= unit
             elif pos > a[i] + b:
                 pos = a[i] + b
+                if unit > 0:
+                    pos = np.round(pos / unit) * unit
+                    if pos > a[i] + b and pos - unit > a[i] - b:
+                        pos -= unit
+                    # elif pos < a[i] - b:
+                    #     pos += unit
             res[i] = pos
-    if unit > 0:
-        pos = np.round(pos / unit) * unit
     return res, pos
-
 
 @loop_all
 def _tdiff(a, n, vec, i, time = None, t = None):
