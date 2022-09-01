@@ -314,12 +314,16 @@ def _diff1(a, vec, time, i = 0, t = np.nan):
 @compiled
 def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0):
     """
-    >>> from pyg import * 
-    >>> a = pd.Series(cumsum(np.random.normal(0,1,1000)), drange(-999))
-    >>> sig = ewmacd(a, 4, 12, vol = 18)
+    >>> from pyg import * ; from pysys import * 
+    >>> a = pd.Series(cumsum(np.random.normal(0,1,10000)), drange(-9999))
+    >>> sig = ewmacd(a, 16, 48, vol = 18)
     >>> sig.plot()
-    >>> ts = buffer(sig, band = 0.1, unit = 1, rounding_band = 0)
-    >>> df_concat([a,ts])[dt(-100):].plot()
+    >>> b0 = buffer(sig, band = 0.1, unit = 0.5, rounding_band = 0)
+    >>> b5 = buffer(sig, band = 0.1, unit = 0.5, rounding_band = 0.5)
+    >>> b25 = buffer(sig, band = 0.1, unit = 0.5, rounding_band = 0.25)
+
+    >>> df_concat([sig, b0, b25, b5], ['raw', '0.', '0.25', '0.5']).plot()
+    >>> tover(sig), tover(b0), tover(b25), tover(b5)
     """
     res = np.full(a.shape, np.nan)
     rbu = rounding_band * unit
