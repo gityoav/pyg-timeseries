@@ -319,27 +319,36 @@ def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0):
     >>> df_concat([a,ts])[dt(-100):].plot()
     """
     res = np.full(a.shape, np.nan)
+    rbu = rounding_band * unit
     if np.isnan(pos):
         pos = 0.0
     for i in range(a.shape[0]):
         if not np.isnan(a[i]):
             b = band[i]
             if pos < a[i] - b:
-                pos = a[i] - b
+                aim = a[i] - b
                 if unit > 0:
-                    pos = np.round(pos / unit) * unit
-                    if pos < a[i] - b and pos + unit < a[i] + b:
-                        pos += unit
-                    # elif pos > a[i] + b:
-                    #     pos -= unit
+                    aim = np.round(aim / unit) * unit
+                    if aim < a[i] - b and aim + unit < a[i] + b: # don't undershoot
+                        pos = aim + unit
+                    elif aim > a[i] and rbu > b and a[i] - rbu > pos: # don't overshoot
+                        aim = a[i] - rbu
+                        pos = np.round(aim / unit) * unit
+                    else:
+                        pos = aim
+                else:
+                    pos = aim
             elif pos > a[i] + b:
-                pos = a[i] + b
+                aim = a[i] + b
                 if unit > 0:
-                    pos = np.round(pos / unit) * unit
-                    if pos > a[i] + b and pos - unit > a[i] - b:
-                        pos -= unit
-                    # elif pos < a[i] - b:
-                    #     pos += unit
+                    aim = np.round(aim / unit) * unit
+                    if aim > a[i] + b and aim - unit > a[i] - b:
+                        pos = aim - unit
+                    elif aim < a[i] and rbu > b and a[i] + rbu < pos: # don't overshoot
+                        aim = a[i] + rbu
+                        pos = np.round(aim / unit) * unit
+                    else:
+                        pos = aim
             res[i] = pos
     return res, pos
 
