@@ -316,22 +316,25 @@ def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0):
     """
     >>> from pyg import * ; from pysys import * 
     >>> a = pd.Series(cumsum(np.random.normal(0,1,10000)), drange(-9999))
-    >>> sig = ewmacd(a, 16, 48, vol = 18)
+    >>> sig = ewmacd(a, 4, 12, vol = 18)
     >>> sig.plot()
-    >>> b0 = buffer(sig, band = 0.1, unit = 0.5, rounding_band = 0)
-    >>> b5 = buffer(sig, band = 0.1, unit = 0.5, rounding_band = 0.5)
-    >>> b25 = buffer(sig, band = 0.1, unit = 0.5, rounding_band = 0.25)
+    >>> unit = .5
+    >>> b0 = buffer(sig, band = 0.1, unit = unit, rounding_band = 0)
+    >>> b5 = buffer(sig, band = 0.1, unit = unit, rounding_band = 0.5)
+    >>> b25 = buffer(sig, band = 0.1, unit = unit, rounding_band = 0.25)
 
-    >>> df_concat([sig, b0, b25, b5], ['raw', '0.', '0.25', '0.5']).plot()
+    >>> df_concat([sig, b0, b25, b5], ['raw', '0.', '0.25', '0.5'])[dt(2020):].plot()
     >>> tover(sig), tover(b0), tover(b25), tover(b5)
     """
     res = np.full(a.shape, np.nan)
     rbu = rounding_band * unit
+    b = 0
     if np.isnan(pos):
         pos = 0.0
     for i in range(a.shape[0]):
         if not np.isnan(a[i]):
-            b = band[i]
+            if not np.isnan(band[i]):
+                b = band[i]
             if pos < a[i] - b:
                 aim = a[i] - b
                 if unit > 0:
@@ -356,8 +359,11 @@ def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0):
                         pos = np.round(aim / unit) * unit
                     else:
                         pos = aim
+                else:
+                    pos = aim
             res[i] = pos
     return res, pos
+
 
 @loop_all
 def _tdiff(a, n, vec, i, time = None, t = None):
