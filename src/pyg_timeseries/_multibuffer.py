@@ -44,8 +44,7 @@ def bisect(f, lb, ub, n = 0, aim = np.nan):
         return ub
 
 
-def _single_step_multibuffer(target, band, point_values, vol, correlations, previous, unit = 1.0, 
-                             prev_m = 1.0, risk_band = 0.1, rounding_band = 0):    
+def _single_step_multibuffer(target, band, point_values, vol, correlations, previous, unit = 1.0, prev_m = 1.0, risk_band = 0.1, rounding_band = 0):    
     """
     Since actual positions are discrete while the target positions can be a fraction, 
     _single_step_multibuffer adjusts the target risk using a multiplier so that the realised (integer valued) buffered positions match the overall risk within [1-risk_band, 1+risk_band]
@@ -198,8 +197,7 @@ def _multibuffer(target, band, unit, correlations, volatilities, point_values, d
                                                       band = band if is_num(band) else band[i], 
                                                       rounding_band = rounding_band,
                                                       point_values = point_values[i], vol = volatilities[i], 
-                                                      correlations = correlations[i], previous = previous, 
-                                                      unit = unit, prev_m = m, risk_band = risk_band)
+                                               correlations = correlations[i], previous = previous, unit = unit, prev_m = m, risk_band = risk_band)
         ds[i] = previous
         ms[i] = m
         mismatches[i] = match
@@ -225,9 +223,8 @@ def _subset_multibuffer(subset, target, band, unit, correlations, volatilities, 
         ids = Dict(zip(target.columns, range(len(target.columns))))[tuple(keys)] if is_df(target) else None
     else:
         keys = ids = None
-    target, band, unit, correlations, volatilities, point_values, data , mult, mismatch, risk_band = _subset([target, band, unit, correlations, volatilities, point_values, data, mult, mismatch, risk_band], ids = ids, keys = keys)
-    return _multibuffer(target = target, band = band, rounding_band = rounding_band, unit = unit, correlations = correlations, 
-                        volatilities = volatilities, point_values = point_values, data = data, mult = mult, mismatch = mismatch, risk_band = risk_band)
+    target, band, unit, correlations, volatilities, point_values, data , mult, mismatch, risk_band, rounding_band = _subset([target, band, unit, correlations, volatilities, point_values, data, mult, mismatch, risk_band, rounding_band], ids = ids, keys = keys)
+    return _multibuffer(target = target, band = band, unit = unit, correlations = correlations, volatilities = volatilities, point_values = point_values, data = data, mult = mult, mismatch = mismatch, risk_band = risk_band, rounding_band = rounding_band)
 
 
 @loop(tuple)
@@ -239,10 +236,8 @@ def _to_target(value, target = None):
     return value
         
 
-def multibuffer(target, band, unit, correlations, volatilities, point_values, data = None, 
-                mult = None, mismatch = None, 
-                risk_band = 0.1, subset = None, subset_mult = None, subset_mismatch = None, 
-                correlations_index = None, rounding_band = 0):
+def multibuffer(target, band, unit, correlations, volatilities, point_values, data = None, mult = None, mismatch = None, 
+                risk_band = 0.1, subset = None, subset_mult = None, subset_mismatch = None, correlations_index = None, rounding_band = 0):
     """
     performs a buffering of a target position but aiming to target a given level of risk
     
@@ -321,7 +316,6 @@ def multibuffer(target, band, unit, correlations, volatilities, point_values, da
             res[key] = _subset_multibuffer(subset = value, 
                                            target = target, 
                                            band = band, 
-                                           rounding_band = rounding_band,
                                            unit = unit, 
                                            correlations = correlations, 
                                            volatilities = volatilities, 
@@ -329,7 +323,8 @@ def multibuffer(target, band, unit, correlations, volatilities, point_values, da
                                            data = data, 
                                            mult = subset_mult[key] if is_df(subset_mult) else mult, 
                                            mismatch = subset_mismatch[key] if is_df(subset_mismatch) else subset_mismatch, 
-                                           risk_band = risk_band)
+                                           risk_band = risk_band,
+                                           rounding_band = rounding_band)
         rtn = Dict(subset_mult = df_concat([r.mult for r in res.values()], list(res.keys())),
                    subset_mismatch = df_concat([r.mismatch for r in res.values()], list(res.keys())),
                    data = df_concat([r.data for r in res.values()]),
@@ -341,11 +336,11 @@ def multibuffer(target, band, unit, correlations, volatilities, point_values, da
         rtn['mismatch'] = rtn['mismatch'][target.columns]
         return rtn
     else:
-        res = _subset_multibuffer(subset = subset, target = target, band = band, rounding_band = rounding_band, unit = unit, 
-                                  correlations = correlations, volatilities = volatilities, point_values = point_values, 
-                              data = data, mult = mult, mismatch = mismatch, risk_band = risk_band)
+        res = _subset_multibuffer(subset = subset, target = target, band = band, unit = unit, correlations = correlations, volatilities = volatilities, point_values = point_values, 
+                              data = data, mult = mult, mismatch = mismatch, risk_band = risk_band, rounding_band = rounding_band)
         res['subset_mult'] = None
         res['subset_mismatch'] = None
     return res
 
 multibuffer.output = _multibuffer.output + ['subset_mult', 'subset_mismatch']
+
