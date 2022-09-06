@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from pyg_base import pd2np, is_pd, loop, is_df, df_reindex, df_concat, is_tss
-from pyg_timeseries._linalg import matmul
+from pyg_timeseries._matmul import matmul
 from pyg_timeseries._rolling import ffill, na2v
 from pyg_timeseries._pandas import reindex_3d
 

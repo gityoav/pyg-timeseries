@@ -19,7 +19,8 @@ from pyg_timeseries._ewmcombine import ewmcombine, ewmcombined
 from pyg_timeseries._pandas import fnna_like, reindex_3d
 from pyg_timeseries._opt import least_squares
 from pyg_timeseries._iter import ts_iterate
-from pyg_timeseries._linalg import eigenvalues, eigenvectors, det, matmul
+from pyg_timeseries._linalg import eigenvalues, eigenvectors, det
+from pyg_timeseries._matmul import matmul
 from pyg_timeseries._bar import bar_r2
 from pyg_timeseries._track import minimize_tracking_error
 from pyg_timeseries._multibuffer import multibuffer

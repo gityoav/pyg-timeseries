@@ -1,5 +1,5 @@
 from pyg_base import df_reindex, is_df, pd2np, loop, Dict, is_nums, is_pd, is_arr, is_num, df_concat, is_series, is_strs, dt, is_tss, is_ts
-from pyg_timeseries._linalg import matmul
+from pyg_timeseries._matmul import matmul
 from pyg_timeseries._rolling import buffer, ffill, v2na
 from pyg_timeseries._pandas import reindex_3d
 import numpy as np
