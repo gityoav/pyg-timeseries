@@ -238,75 +238,92 @@ class apply_along_first_axis(wrapper):
         else:
             return np.array(res)
 
-# import pandas as pd
-# from pyg.base import wrapper, is_ts, is_dict, is_tuple, getargspec, loop, first, Dict, zipper
+import pandas as pd
+from pyg.base import wrapper, is_ts, is_dict, is_tuple, getargspec, loop, first, Dict, zipper
 
-# class persist_data(wrapper):
-#     """
-#     We work with state-persisting function that return a variable called 'data'
+class persist_data(wrapper):
+    """
+    We work with state-persisting function that return a variable called 'data'
     
-#     :Example:
-#     -------
-#     >>> from pyg import *
-#     >>> ts = pd.Series(np.random.normal(0,1,(1000)), drange(-999))
-#     >>> ts[ts<0.1] = np.nan
+    :Example:
+    -------
+    >>> from pyg import *
+    >>> ts = pd.Series(np.random.normal(0,1,(1000)), drange(-999))
+    >>> ts[ts<0.1] = np.nan
 
-#     We can run ts in one go:
+    We can run ts in one go:
         
-#     >>> both = ffill_(ts)
+    >>> both = ffill_(ts)
 
-#     Or split it into two parts:
+    Or split it into two parts:
 
-#     >>> old = ffill_(ts.iloc[:500])
+    >>> old = ffill_(ts.iloc[:500])
     
-#     old.data is the data for first 500 entries. We can use this data to speed up later calculations...
+    old.data is the data for first 500 entries. We can use this data to speed up later calculations...
     
-#     >>> new = ffill_(ts.iloc[500:], **(old-'data')) 
+    >>> new = ffill_(ts.iloc[500:], **(old-'data')) 
     
-#     We note: 
-#     1) the 'data' variable must be remove
-#     2) We need to glue together old.data and new.data
+    We note: 
+    1) the 'data' variable must be remove
+    2) We need to glue together old.data and new.data
     
-#     However... persist_data does the work for you:
+    However... persist_data does the work for you:
         
-#     >>> persist_ffill_ = persist_data(ffill_)
-#     >>> glued_with_old = persist_ffill_(ts, **old)  # Note that we pass on data and the full ts, but calculation is done only on the 'new' bit of ts
-#     >>> glued_just_new = persist_ffill_(ts.iloc[500:], **old)  
+    >>> persist_ffill_ = persist_data(ffill_)
+    >>> glued_with_old = persist_ffill_(ts, **old)  # Note that we pass on data and the full ts, but calculation is done only on the 'new' bit of ts
+    >>> glued_just_new = persist_ffill_(ts.iloc[500:], **old)  
 
-#     >>> assert eq(glued_with_old, both)    
-#     >>> assert eq(glued_just_new, both)    
+    >>> assert eq(glued_with_old, both)    
+    >>> assert eq(glued_just_new, both)    
     
-#     """
-#     def wrapped(self, *args, **kwargs):
-#         data = kwargs.pop('data', None)
-#         if data is not None and len(data)>0 and is_ts(data):
-#             cutoff = data.index[-1]
-#             args_ = [v[v.index>cutoff] if is_ts(v) and len(v) else v for v in args]
-#             kwargs_ = {k : v[v.index>cutoff] if is_ts(v) and len(v) else v for k, v in kwargs.items()}
-#             res = self.function(*args_, **kwargs_)
-#             if res is None:
-#                 return data
-#             if is_ts(res):
-#                 new = res
-#             elif is_dict(res):
-#                 new = res.get('data')
-#             elif is_tuple(res):
-#                 new = res[0]
-#             else:
-#                 raise ValueError('result of persistence data must be a timeseries or a dict \n%s '%res)
-#             if new is None:
-#                 both = data
-#             elif is_ts(new):
-#                 both = data if len(new) == 0 else pd.concat([data[data.index<new.index[0]], new])
-#             else:
-#                 raise ValueError('data must be None or a timeseries')                
-#             if is_ts(res):
-#                 return both
-#             elif is_dict(res):
-#                 res['data'] = both
-#                 return res
-#             elif is_tuple(res):
-#                 return (both,) + res[1:]
-#         else:
-#             return self.function(*args, **kwargs)
+    """
+    def persist_outputs(self, *args, **kwargs):
+        output = as_list(getattr(self.function,'output', 'data'))
+        old = {o: kwargs.pop(o) for o in output}
+        old_ts = {k:v for k, v in old.items() if is_ts(v) and len(v)}
+        if len(old_ts) == 0:
+            return self.function(*args, **kwargs, **old)
+        old_t1 = set([v.index[-1] for v in old_ts.values()])
+        if len(old_t1) > 1:
+            raise ValueError(f'multiple timeseries and multiple endates {old_t1}')
+        cutoff = list(old_t1)[0]
+        args_ = [v[v.index>cutoff] if is_ts(v) and len(v) else v for v in args]
+        kwargs_ = {k : v[v.index>cutoff] if is_ts(v) and len(v) else v for k, v in kwargs.items()}
+        res = self.function(*args_, **kwargs_, **old)
+        
+
+            
+    
+    def wrapped(self, *args, **kwargs):
+        data = kwargs.pop('data', None)
+        if data is not None and len(data)>0 and is_ts(data):
+            cutoff = data.index[-1]
+            args_ = [v[v.index>cutoff] if is_ts(v) and len(v) else v for v in args]
+            kwargs_ = {k : v[v.index>cutoff] if is_ts(v) and len(v) else v for k, v in kwargs.items()}
+            res = self.function(*args_, **kwargs_)
+            if res is None:
+                return data
+            if is_ts(res):
+                new = res
+            elif is_dict(res):
+                new = res.get('data')
+            elif is_tuple(res):
+                new = res[0]
+            else:
+                raise ValueError('result of persistence data must be a timeseries or a dict \n%s '%res)
+            if new is None:
+                both = data
+            elif is_ts(new):
+                both = data if len(new) == 0 else pd.concat([data[data.index<new.index[0]], new])
+            else:
+                raise ValueError('data must be None or a timeseries')                
+            if is_ts(res):
+                return both
+            elif is_dict(res):
+                res['data'] = both
+                return res
+            elif is_tuple(res):
+                return (both,) + res[1:]
+        else:
+            return self.function(*args, **kwargs)
 
