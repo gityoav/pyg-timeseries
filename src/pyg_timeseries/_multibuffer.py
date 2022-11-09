@@ -270,7 +270,6 @@ def _subset_multibuffer(subset, target, band, unit, correlations, volatilities, 
     return _multibuffer(target = target, position_target = position_target, band = band, unit = unit, correlations = correlations, volatilities = volatilities, point_values = point_values, data = data, mult = mult, mismatch = mismatch, risk_band = risk_band, rounding_band = rounding_band)
 
 
-df_concat(None)
 @loop(tuple)
 def _to_target(value, target = None):
     """aligns value with target"""
