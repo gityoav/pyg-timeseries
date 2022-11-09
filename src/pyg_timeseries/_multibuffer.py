@@ -3,6 +3,7 @@ from pyg_timeseries._matmul import matmul
 from pyg_timeseries._rolling import buffer, ffill, v2na
 from pyg_timeseries._pandas import reindex_3d
 import numpy as np
+import pandas as pd
 from functools import partial
 
 def bisect(f, lb, ub, n = 0, aim = np.nan):
@@ -277,7 +278,7 @@ def _to_target(value, target = None):
         value = df_concat(value)
     if is_df(target) and is_df(value):
         value = ffill(df_reindex(value, target))
-    return value
+    return ffill(value) if isinstance(value, (np.array,pd.DataFrame))  else value
         
 
 def multibuffer(target, band, unit, correlations, volatilities, point_values, position_target = None, data = None, mult = None, mismatch = None, 
@@ -358,18 +359,18 @@ def multibuffer(target, band, unit, correlations, volatilities, point_values, po
     """
     target = _to_target(target)
     volatilities, point_values, band, position_target = _to_target((volatilities, point_values, band, position_target), target)
+
+    if is_num(correlations):
+        correlations = near_correlation_matrix(correlations)
+    if is_list(correlations):
+        correlations = np.array(correlations)
+    if len(correlations.shape) == 1:
+        correlations = beta_correlation_matrix(correlations)
     if is_df(target): 
         if len(correlations.shape) == 3 and correlations_index is not None and len(correlations) == len(correlations_index):
             correlations = reindex_3d(correlations, index = target.index, original_index = correlations_index)
-        if is_num(correlations):
-            correlations = near_correlation_matrix(correlations)
-        if is_list(correlations):
-            correlations = np.array(correlations)
-        if len(correlations.shape) == 1:
-            correlations = beta_correlation_matrix(correlations)
         if len(correlations.shape) == 2:
             correlations = np.array([correlations] * len(target))
-            
 
     if isinstance(subset, dict):
         res = {}
@@ -383,6 +384,7 @@ def multibuffer(target, band, unit, correlations, volatilities, point_values, po
                                            correlations = correlations, 
                                            volatilities = volatilities, 
                                            point_values = point_values, 
+                                           position_target = position_target,
                                            data = data, 
                                            mult = subset_mult[key] if is_df(subset_mult) else mult, 
                                            mismatch = subset_mismatch[key] if is_df(subset_mismatch) else subset_mismatch, 
@@ -399,7 +401,7 @@ def multibuffer(target, band, unit, correlations, volatilities, point_values, po
         rtn['mismatch'] = rtn['mismatch'][target.columns]
         return rtn
     else:
-        res = _subset_multibuffer(subset = subset, target = target, band = band, unit = unit, correlations = correlations, volatilities = volatilities, point_values = point_values, 
+        res = _subset_multibuffer(subset = subset, target = target, position_target = position_target, band = band, unit = unit, correlations = correlations, volatilities = volatilities, point_values = point_values, 
                               data = data, mult = mult, mismatch = mismatch, risk_band = risk_band, rounding_band = rounding_band)
         res['subset_mult'] = None
         res['subset_mismatch'] = None
