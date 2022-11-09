@@ -23,4 +23,4 @@ from pyg_timeseries._iter import ts_iterate
 from pyg_timeseries._matmul import matmul
 from pyg_timeseries._bar import bar_r2
 from pyg_timeseries._track import minimize_tracking_error
-from pyg_timeseries._multibuffer import multibuffer
+from pyg_timeseries._multibuffer import multibuffer, near_correlation_matrix, beta_correlation_matrix
