@@ -24,7 +24,7 @@ def _cast_strided_result(a, va, res, mask, n):
 @loop_all
 @pd2np
 def _rolling_quantile(a, n, quantile, vec = None):
-    vec = _vec(vec,0)
+    vec = _vec(a, vec, 0)
     if len(vec):
         a_ = np.concatenate([vec,a])
     else:
@@ -51,7 +51,7 @@ def rolling_quantile(a, n, quantile = 0.5, axis = 0, data = None, state = None):
     :Example:
     -------
     >>> from pyg import *; import pandas as pd; import numpy as np
-    >>> a = pd.Series(np.random.normal(0,1,10000), drange(-9999))
+    >>> a = pd.Series(np.random.normal(0,1,10000), drange(-9999)); n = 100; quantile = 0.3; state = None
     >>> res = rolling_quantile(a, 100, 0.3)
     >>> assert sub_(res, a.rolling(100).quantile(0.3)).max() < 1e-13
 
@@ -113,7 +113,7 @@ def rolling_quantile_(a, n, quantile = 0.5, axis = 0, data = None, instate = Non
         else:
             qs = qs[0]
     state = instate  or {}
-    res = _data_state(['data','vec'],_rolling_quantile(a, n = n , quantile = qs, axis = axis, **state))
+    res = _data_state(['data','vec'],_rolling_quantile(a, n = n, quantile = qs, axis = axis, **state))
     qs = as_list(quantile)
     @loop(list, dict)
     def add_qs(res):
@@ -122,4 +122,4 @@ def rolling_quantile_(a, n, quantile = 0.5, axis = 0, data = None, instate = Non
         return res
     return add_qs(res)
 
-rolling_quantile.ouput = ['data', 'state']
+rolling_quantile_.ouput = ['data', 'state']
