@@ -153,7 +153,6 @@ def _from(value, n, t = None):
     else:
         return value
 
-@loop(list)
 def _subset(value, keys = None, ids = None):
     if keys is None and ids is None:
         return value
@@ -266,7 +265,9 @@ def _subset_multibuffer(subset, target, band, unit, correlations, volatilities, 
         ids = Dict(zip(target.columns, range(len(target.columns))))[tuple(keys)] if is_df(target) else None
     else:
         keys = ids = None
-    target, position_target, band, unit, correlations, volatilities, point_values, data , mult, mismatch, risk_band, rounding_band = _subset([target, position_target, band, unit, correlations, volatilities, point_values, data, mult, mismatch, risk_band, rounding_band], ids = ids, keys = keys)
+    variables = [target, position_target, band, unit, correlations, volatilities, point_values, data , mult, mismatch, risk_band, rounding_band]
+    target, position_target, band, unit, correlations, volatilities, point_values, data , mult, mismatch, risk_band, rounding_band = [_subset(i, ids = ids, keys = keys) for i in variables]
+    # target, band, unit, correlations, volatilities, point_values, data , mult, mismatch, risk_band, rounding_band = _subset([target, band, unit, correlations, volatilities, point_values, data, mult, mismatch, risk_band, rounding_band], ids = ids, keys = keys)
     return _multibuffer(target = target, position_target = position_target, band = band, unit = unit, correlations = correlations, volatilities = volatilities, point_values = point_values, data = data, mult = mult, mismatch = mismatch, risk_band = risk_band, rounding_band = rounding_band)
 
 
@@ -277,7 +278,7 @@ def _to_target(value, target = None):
         value = df_concat(value)
     if is_df(target) and is_df(value):
         value = ffill(df_reindex(value, target))
-    return ffill(value) if isinstance(value, (np.array,pd.DataFrame))  else value
+    return ffill(value) if isinstance(value, (np.ndarray,pd.DataFrame))  else value
         
 
 def multibuffer(target, band, unit, correlations, volatilities, point_values, position_target = None, data = None, mult = None, mismatch = None, 
@@ -361,21 +362,25 @@ def multibuffer(target, band, unit, correlations, volatilities, point_values, po
 
     if is_num(correlations):
         correlations = near_correlation_matrix(correlations)
+        print('near')
     if is_list(correlations):
         correlations = np.array(correlations)
+        print('correlation list')
     if len(correlations.shape) == 1:
+        print('beta correlation')
         correlations = beta_correlation_matrix(correlations)
     if is_df(target): 
         if len(correlations.shape) == 3 and correlations_index is not None and len(correlations) == len(correlations_index):
             correlations = reindex_3d(correlations, index = target.index, original_index = correlations_index)
         if len(correlations.shape) == 2:
+            print('constant correlation, now in 3d')
             correlations = np.array([correlations] * len(target))
-
     if isinstance(subset, dict):
         res = {}
         for key in subset:
             value = subset[key]
             print('running', key, 'for', value)
+            assert position_target is None
             res[key] = _subset_multibuffer(subset = value, 
                                            target = target, 
                                            band = band, 
