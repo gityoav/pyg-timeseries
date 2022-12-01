@@ -115,28 +115,6 @@ def _ffill(a, n = 0, prev = None, i = None):
         return _ffill2d(a, n, prev , i)
 
 
-@loop(dict, list)
-@pd2np
-def _na2v(a, new = 0.0):
-    res = a.copy()
-    if len(a.shape) == 1:
-        res[np.isnan(res)] = new
-    else:
-        for j in range(a.shape[0]):
-            res[j, np.isnan(res[j])] = new
-    return res
-
-@loop(dict, list)
-@pd2np
-def _v2na(a, old = 0.0, new = np.nan):
-    res = a.copy().astype(float)
-    if len(a.shape) == 1:
-        res[res == old] = new
-    else:
-        for j in range(a.shape[0]):
-            res[j, res[j] == old] = new
-    return res
-
 
 @loop_all
 @pd2np
@@ -762,8 +740,6 @@ def v2na(a, old = 0.0, new = np.nan):
     return res
 
     
-    return _v2na(a, old = old, new = new)
-
 def na2v(a, new = 0.0):
     """
     replaces a nan with a new value
