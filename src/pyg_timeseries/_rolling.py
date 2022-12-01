@@ -727,6 +727,18 @@ def v2na(a, old = 0.0, new = np.nan):
     >>> assert eq(v2na(a), np.array([1., np.nan, 1., np.nan]))
     >>> assert eq(v2na(a,1), np.array([np.nan, np.nan, np.nan, 0]))
     >>> assert eq(v2na(a,1,0), np.array([0., np.nan, 0., 0.]))
+
+    :Example: handling of single value, multiple types
+    ---------
+    >>> assert np.isnan(v2na('hi', 'hi'))
+
+    :Example: handling of dataframes
+    ---------
+    >>> a = pd.Series([1.0,np.nan])
+    >>> assert eq(v2na(a,1.), pd.Series([np.nan, np.nan]))
+
+    >>> a = pd.DataFrame(dict(x = [1.0,np.nan], y = [2.0, np.nan]))
+    >>> assert eq(v2na(a,1), pd.DataFrame(dict(x = [np.nan, np.nan], y = [2.0, np.nan])))
     
     :Parameters:
     ----------------
@@ -741,8 +753,15 @@ def v2na(a, old = 0.0, new = np.nan):
     array/timeseries
 
     """
-    if is_num(a):
+    if type(a) == type(old):
         return new if a == old else a
+    else:
+        res = a.copy()
+        res = res.astype(float if is_num(old) else type(old))
+        res[res == old] = new
+    return res
+
+    
     return _v2na(a, old = old, new = new)
 
 def na2v(a, new = 0.0):
@@ -752,9 +771,31 @@ def na2v(a, new = 0.0):
     :Example:
     -------
     >>> from pyg import *
+    >>> assert na2v(np.nan) == 0
+
     >>> a = np.array([1., np.nan, 1.])
     >>> assert eq(na2v(a), np.array([1., 0.0, 1.]))
     >>> assert eq(na2v(a,1), np.array([1., 1., 1.]))
+
+    :Example: handling of non-float object-types
+    -------
+    >>> a = np.array([np.nan], dtype = 'object')
+    >>> na2v(a)
+    >>> assert eq(na2v(a), np.array([0.0]))
+
+    :Example: handling of multiple dimensions arrays
+    -------
+    >>> a = np.array([[2.0, np.nan], [1.0, np.nan]])
+    >>> na2v(a)
+    >>> assert eq(na2v(a), np.array([[2.0, 0], [1.0, 0]]))
+
+    :Example: handling of pandas
+    ---------
+    >>> a = pd.Series([1.0,np.nan])
+    >>> assert eq(na2v(a), pd.Series([1.0,0]))
+
+    >>> a = pd.DataFrame(dict(x = [1.0,np.nan], y = [2.0, np.nan]))
+    >>> assert eq(na2v(a), pd.DataFrame(dict(x = [1.0,0], y = [2.0, 0])))
     
     :Parameters:
     ----------------
@@ -769,7 +810,13 @@ def na2v(a, new = 0.0):
     """
     if is_num(a):
         return new if np.isnan(a) else a
-    return _na2v(a, new)
+    else:
+        res = a.copy()
+        res = res.astype(float)
+        res[np.isnan(res)] = new
+    return res
+
+
     
 
 def init2v(a, n = 0, new = np.nan):
