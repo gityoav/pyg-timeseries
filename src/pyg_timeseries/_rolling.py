@@ -731,7 +731,7 @@ def v2na(a, old = 0.0, new = np.nan):
     array/timeseries
 
     """
-    if type(a) == type(old):
+    if is_num(a):
         return new if a == old else a
     else:
         res = a.copy()
