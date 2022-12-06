@@ -30,6 +30,9 @@ def rolling_median(a, n, axis = 0, data = None, state = None):
     >>> a = pd.Series(np.random.normal(0,1,10000), drange(-9999))
     >>> panda = a.rolling(10).median(); ts = rolling_median(a,10)
     >>> assert abs(ts-panda).max()<1e-10   
+    >>> ab = pd.DataFrame(dict(a = np.random.normal(0,1,10000), b = np.random.normal(0,1,10000)), drange(-9999))
+    >>> panda = ab.rolling(10).median(); ts = rolling_median(ab,10)
+    >>> assert abs(ts-panda).max().max()<1e-10   
 
     :Example: nan handling
     ----------------------
@@ -126,4 +129,5 @@ def expanding_median(a, axis = 0):
 
     """
 
+    import bottleneck as bn
     return first_(_rolling_window(a,0,1, vec = None, func = bn.move_median, axis = axis))
