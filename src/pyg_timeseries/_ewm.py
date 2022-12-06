@@ -102,53 +102,68 @@ def _ewma(a, n, time, t = np.nan, t0 = 0, t1 = 0):
 
 @pd2np
 @compiled
-def _ewmrms(a, n, time, t = np.nan, t0 = 0., t2 = 0.):
+def _ewmrms(a, n, time, t = np.nan, t0 = 0., t2 = 0., exc_zero = False, max_move = 0):
     if n == 1:
         return a, t, t0, t2
     w = _w(n)
     res = np.empty_like(a)
-    i0 = 0
+    apply_max = max_move>0
+    i0 = 0; ai0 = a[i0]
     for i in range(a.shape[0]):
         if np.isnan(a[i]):
             res[i] = np.nan
         else:
-            if time[i] == t:
-                t2 = t2 + (1-w) * (a[i]**2 - a[i0]**2)
+            if apply_max and not np.isnan(res[i0]):
+                ai = max(min(res[i0] * max_move, a[i]), -res[i0] * max_move)
+            else:
+                ai = a[i]                
+            if exc_zero and ai == 0:
+                res[i] = res[i0]
+            elif time[i] == t:
+                t2 = t2 + (1-w) * (ai**2 - ai0**2)
             else:
                 p = w if np.isnan(time[i]) else w**(time[i]-t)
-                v = a[i]
+                v = ai
                 t0 = t0 * p + (1-w)
                 t2 = t2 * p + (1-w) * v**2
                 t = time[i]
-            i0 = i
+            i0 = i; ai0 = ai
             res[i] = np.nan if t0 == 0 else np.sqrt(t2/t0)
     return res, t, t0, t2
 
 
+
 @pd2np
 @compiled
-def _ewmstd(a, n, time, t = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = 0.25, bias = False, calculator = stdev_calculation_ewm):
+def _ewmstd(a, n, time, t = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = 0.25, bias = False, exc_zero = False, max_move = 0, calculator = stdev_calculation_ewm):
     if n == 1:
         return np.full_like(a, 0.0), t, t0, t1, t2, w2
     w = _w(n)
     res = np.empty_like(a)
-    i0 = 0
+    apply_max = max_move>0
+    i0 = 0; ai0 = a[i0]
     for i in range(a.shape[0]):
         if np.isnan(a[i]):
             res[i] = np.nan
         else:
-            if time[i] == t:
-                t1 = t1 + (1-w) * (a[i] - a[i0])
-                t2 = t2 + (1-w) * (a[i]**2 - a[i0]**2)
+            if apply_max and not np.isnan(res[i0]):
+                ai = max(min(res[i0] * max_move, a[i]), -res[i0] * max_move)
+            else:
+                ai = a[i]                
+            if exc_zero and ai == 0:
+                res[i] = res[i0]
+            elif time[i] == t:
+                t1 = t1 + (1-w) * (ai - ai0)
+                t2 = t2 + (1-w) * (ai**2 - ai0**2)
             else:
                 p = w if np.isnan(time[i]-t) else w**(time[i]-t)
-                v = a[i]
+                v = ai
                 t0 = t0 * p + (1-w)
                 w2 = w2 * p**2 + (1-w)**2
                 t1 = t1 * p + (1-w) * v
                 t2 = t2 * p + (1-w) * v**2
                 t = time[i]
-            i0 = i
+            i0 = i; ai0 = ai
             res[i] = calculator(t0, t1, t2, w2 = w2, min_sample = min_sample, bias = bias)
     return res, t, t0, t1, t2, w2
 
@@ -627,16 +642,18 @@ def _ewmat(a, n, time = None, t = None, t0 = 0, t1 = 0):
     return _ewma(a = a, n = n, time = time, t = t, t0 = t0, t1 = t1)
 
 @loop_all
-def _ewmrmst(a, n, time = None, t = None, t0 = 0, t2 = 0):
+def _ewmrmst(a, n, time = None, t = None, t0 = 0, t2 = 0, exc_zero = False, max_move = 0):
     time = clock(a, time, t)
     t = 0 if t is None or np.isnan(t) else t
-    return _ewmrms(a, n, time = time, t = t, t0 = t0, t2 = t2)
+    return _ewmrms(a, n, time = time, t = t, t0 = t0, t2 = t2, exc_zero = exc_zero, max_move = max_move)
 
 @loop_all
-def _ewmstdt(a, n, time = None, t = None, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = 0.25, bias = False, calculator = stdev_calculation_ewm):
+def _ewmstdt(a, n, time = None, t = None, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = 0.25, bias = False, exc_zero = False, max_move = 0, calculator = stdev_calculation_ewm):
     time = clock(a, time, t)
     t = 0 if t is None or np.isnan(t) else t
-    return _ewmstd(a, n, time = time, t = t, t0 = t0, t1 = t1, t2 = t2, w2 = w2, min_sample=min_sample, bias = bias, calculator = calculator)
+    return _ewmstd(a, n, time = time, t = t, t0 = t0, t1 = t1, t2 = t2, w2 = w2, min_sample=min_sample, bias = bias, calculator = calculator, exc_zero = exc_zero, max_move = max_move)
+
+
 
 @loop_all
 @presync
@@ -792,17 +809,17 @@ def ewma(a, n, time = None, axis = 0, data = None, state = None):
     return first_(_ewmat(a=a, n=n, time = time, axis=axis, **state))
 
 
-def ewmrms_(a, n, time = None, axis = 0, data = None, instate = None):
+def ewmrms_(a, n, time = None, axis = 0, data = None, exc_zero = False, max_move = 0, instate = None):
     """
     Equivalent to ewmrms but returns a state parameter for instantiation of later calculations.
     See ewmrms documentation for more details
     """
     state = instate or {}
-    return _data_state(['data', 't', 't0', 't2'],_ewmrmst(a, n, time = time, axis=axis, **state))
+    return _data_state(['data', 't', 't0', 't2'],_ewmrmst(a, n, time = time, axis=axis, exc_zero = exc_zero, max_move = max_move,**state))
 
 ewmrms_.output = ['data', 'state']
 
-def ewmrms(a, n, time=None, axis=0, data = None, state = None):
+def ewmrms(a, n, time=None, axis=0, data = None, exc_zero = False, max_move = 0, state = None):
     """
     ewmrms is equivalent to (a**2).ewm(n).mean()**0.5  but with...
     - supports np.ndarrays as well as timeseries
@@ -821,6 +838,10 @@ def ewmrms(a, n, time=None, axis=0, data = None, state = None):
             - the ewm calculation on last observations per day is what is retained. 
             - the ewm calculation on each intraday observation is same as an ewm(past EOD + current intraday observation)
     
+    exc_zero: bool
+        if True, will skip zeros inside a and will assume these are a result of forward filling
+    max_move: float
+        if positive, will "clip" a[i] at current stdev estimation * max_move
     data: None.
         unused at the moment. Allow code such as func(live, **func_(history)) to work
     state: dict, optional
@@ -857,6 +878,26 @@ def ewmrms(a, n, time=None, axis=0, data = None, state = None):
     >>> 2021-02-07  0.839168  0.839168
     >>> 2021-02-08  0.831109  0.831109
         
+    :Example: exc_zero
+    ------------------
+    >>> import pandas as pd; import numpy as np; from pyg import *
+    >>> a = pd.Series(np.random.normal(0,1,10000), drange(-9999))
+    >>> a[dt(-10):] = 0
+    >>> exclude = ewmrms(a, 10, exc_zero = True)
+    >>> assert exclude .iloc[-1] == exclude.iloc[-10]
+    >>> no_exclude = ewmrms(a, 10)
+    >>> assert no_exclude.iloc[-1] < no_exclude.iloc[-10]
+
+    :Example: max_move
+    ------------------
+    >>> import pandas as pd; import numpy as np; from pyg import *
+    >>> a = pd.Series(np.random.normal(0,1,10000), drange(-9999)) ## a series with stdev of 1 approximately
+    >>> a.iloc[-1] = 100. ## put a bad data point with a huge spike...
+    >>> max_move = ewmrms(a, 10, max_move = 4)
+    >>> assert max_move.iloc[-1] < 2
+    >>> no_max_move = ewmrms(a, 10)
+    >>> assert no_max_move.iloc[-1] > 20
+
     :Example: state management
     --------------------------
     >>> old = a.iloc[:5000]
@@ -891,19 +932,19 @@ def ewmrms(a, n, time=None, axis=0, data = None, state = None):
     
     """
     state = state or {}
-    return first_(_ewmrmst(a, n, time = time, axis=axis, **state))
+    return first_(_ewmrmst(a, n, time = time, axis=axis, exc_zero = exc_zero, max_move = max_move, **state))
 
-def ewmstd_(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, instate = None):
+def ewmstd_(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, exc_zero = False, max_move = 0, instate = None):
     """
     Equivalent to ewmstd but returns a state parameter for instantiation of later calculations.
     See ewmstd documentation for more details
     """
     state = instate or {}
-    return _data_state(['data', 't', 't0', 't1', 't2', 'w2'],_ewmstdt(a, n, time = time, min_sample=min_sample, axis=axis, calculator = stdev_calculation_ewm, **state))
+    return _data_state(['data', 't', 't0', 't1', 't2', 'w2'],_ewmstdt(a, n, time = time, min_sample=min_sample, axis=axis, exc_zero = exc_zero, max_move = max_move, calculator = stdev_calculation_ewm, **state))
 
 ewmstd_.output = ['data', 'state']
 
-def ewmstd(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, state = None):
+def ewmstd(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, exc_zero = False, max_move = 0, state = None):
     """
     ewmstd is equivalent to a.ewm(n).std() but with...
     - supports np.ndarrays as well as timeseries
@@ -922,6 +963,10 @@ def ewmstd(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None
             - the ewm calculation on last observations per day is what is retained. 
             - the ewm calculation on each intraday observation is same as an ewm(past EOD + current intraday observation)
     
+    exc_zero: bool
+        if True, will skip zeros inside a and will assume these are a result of forward filling
+    max_move: float
+        if positive, will "clip" a[i] at current stdev estimation * max_move
     data: None.
         unused at the moment. Allow code such as func(live, **func_(history)) to work
     state: dict, optional
@@ -936,6 +981,26 @@ def ewmstd(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None
     >>> ts = ewmstd(a,10, bias = True); df = a.ewm(10).std(bias = True)
     >>> assert abs(ts-df).max()<1e-10
 
+
+    :Example: exc_zero
+    ------------------
+    >>> import pandas as pd; import numpy as np; from pyg import *
+    >>> a = pd.Series(np.random.normal(0,1,10000), drange(-9999))
+    >>> a[dt(-10):] = 0
+    >>> exclude = ewmstd(a, 10, exc_zero = True)
+    >>> assert exclude .iloc[-1] == exclude.iloc[-10]
+    >>> no_exclude = ewmstd(a, 10)
+    >>> assert no_exclude.iloc[-1] < no_exclude.iloc[-10]
+
+    :Example: max_move
+    ------------------
+    >>> import pandas as pd; import numpy as np; from pyg import *
+    >>> a = pd.Series(np.random.normal(0,1,10000), drange(-9999)) ## a series with stdev of 1 approximately
+    >>> a.iloc[-1] = 100. ## put a bad data point with a huge spike...
+    >>> max_move = ewmstd(a, 10, max_move = 4)
+    >>> assert max_move.iloc[-1] < 2
+    >>> no_max_move = ewmstd(a, 10)
+    >>> assert no_max_move.iloc[-1] > 20
 
     :Example: numpy arrays support
     ------------------------------
@@ -984,18 +1049,19 @@ def ewmstd(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None
     
     """
     state = state or {}
-    return first_(_ewmstdt(a, n, time = time, min_sample=min_sample, bias = bias, axis=axis,  calculator = stdev_calculation_ewm, **state))
+    return first_(_ewmstdt(a, n, time = time, min_sample=min_sample, bias = bias, axis=axis, exc_zero = exc_zero, max_move = max_move,  calculator = stdev_calculation_ewm, **state))
 
 
-def ewmvar_(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, instate = None):
+def ewmvar_(a, n, time = None, min_sample=0.25, bias = False, axis=0, exc_zero = False, data = None, instate = None):
     """
     Equivalent to ewmvar but returns a state parameter for instantiation of later calculations.
     See ewmvar documentation for more details
     """
     state = instate or {}
-    return _data_state(['data', 't', 't0', 't1', 't2', 'w2'],_ewmstdt(a, n, time = time, min_sample=min_sample, axis=axis, calculator = variance_calculation_ewm, **state))
+    max_move = 0
+    return _data_state(['data', 't', 't0', 't1', 't2', 'w2'],_ewmstdt(a, n, time = time, min_sample=min_sample, axis=axis, exc_zero = exc_zero, max_move = max_move, calculator = variance_calculation_ewm, **state))
 
-def ewmvar(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, state = None):
+def ewmvar(a, n, time = None, min_sample=0.25, bias = False, axis=0, exc_zero = False, data = None, state = None):
     """
     ewmstd is equivalent to a.ewm(n).var() but with...
     - supports np.ndarrays as well as timeseries
@@ -1016,6 +1082,8 @@ def ewmvar(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None
     
     data: None.
         unused at the moment. Allow code such as func(live, **func_(history)) to work
+    exc_zero: bool
+        if True, will skip zeros inside a and will assume these are a result of forward filling
     state: dict, optional
         state parameters used to instantiate the internal calculations, based on history prior to 'a' provided. 
     
@@ -1076,7 +1144,8 @@ def ewmvar(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None
     
     """
     state = state or {}
-    return first_(_ewmstdt(a, n, time = time, min_sample=min_sample, bias = bias, axis=axis, calculator = variance_calculation_ewm, **state))
+    max_move = 0
+    return first_(_ewmstdt(a, n, time = time, min_sample=min_sample, bias = bias, axis=axis, exc_zero = exc_zero, max_move = max_move, calculator = variance_calculation_ewm, **state))
 
 
 ewmstd_.output = ['data', 'state']

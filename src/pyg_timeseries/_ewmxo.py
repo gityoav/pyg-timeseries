@@ -168,7 +168,7 @@ def ewmacd_(ts, fast, slow, vol = None, time = None, instate = None, rms = True)
 ewmacd_.output = ['data', 'state']
 
 
-def ewmvol_(a, n, time = None, instate = None, rms = True):
+def ewmvol_(a, n, time = None, instate = None, rms = True, exc_zero = False, max_move = 0):
     """
     Just like ewmstd / ewmrms but calculated of prices rather than returns.
     It handles time better by delegating the time calculating for the diff as well
@@ -180,14 +180,14 @@ def ewmvol_(a, n, time = None, instate = None, rms = True):
     """
     state = Dict(vol = {}, diff = {}) if instate is None else instate
     rtn_ = diff_(a, 1, time = time, instate = state.get('diff'))
-    vol_ = (ewmrms_ if rms else ewmstd_)(rtn_.data, n, time = time, instate = state.get('vol'))
+    vol_ = (ewmrms_ if rms else ewmstd_)(rtn_.data, n, time = time, exc_zero = exc_zero, max_move = max_move, instate = state.get('vol'))
     return Dict(data = vol_.data, state = Dict(vol = vol_.state, 
                                                 diff = rtn_.state))
 
 ewmvol_.output = ['data', 'state']
 
 
-def ewmvol(a, n, time  = None, state = None, rms = True):
+def ewmvol(a, n, time  = None, state = None, rms = True, exc_zero = False, max_move = 0):
     """
     calculate ewmstd/ewmrms based of a price
 
@@ -199,7 +199,7 @@ def ewmvol(a, n, time  = None, state = None, rms = True):
     >>> rtn = diff(a)
     >>> assert abs(ewmrms(rtn, 10)-ewmvol(a, 10)).max() < 1e-10
     """
-    return ewmvol_(a = a, n = n, time = time, instate = state, rms = rms).data
+    return ewmvol_(a = a, n = n, time = time, instate = state, rms = rms, exc_zero = exc_zero, max_move = max_move).data
 
 
 def ewmxo(rtn, fast, slow, vol = None, time  = None, state = None):
