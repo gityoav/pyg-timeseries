@@ -219,7 +219,7 @@ def ts_sum_(a, axis = 0, data = None, instate = None):
 def _ts_mean(a, vec = None):
     vec = _vec(a, vec,2,0.)
     vec = _moments(a, vec)
-    return vec[1]/vec[0], vec
+    return np.nan if vec[0] == 0 else vec[1]/vec[0], vec
 
 def ts_mean(a, axis = 0, data = None, state = None):
     """
@@ -400,7 +400,7 @@ def ts_std_(a, axis = 0, data = None, instate = None):
 def _ts_rms(a, vec = None):
     vec = _vec(a, vec, 3, 0.)
     vec = _moments(a, vec)
-    return np.sqrt(vec[2]/vec[0]), vec
+    return np.nan if vec[0] <= 0 else np.sqrt(vec[2]/vec[0]), vec
     
 
 
