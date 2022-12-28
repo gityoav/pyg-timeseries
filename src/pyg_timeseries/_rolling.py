@@ -98,10 +98,13 @@ def _ffill2d(a, n, prev, i):
             prev = res[j]
     return res, prev, i
 
+
 @loop(dict, list)
 @pd2np
 def _ffill(a, n = 0, prev = None, i = None):
-    if len(a.shape) == 1:
+    if is_num(a):
+        return a, prev, i
+    elif len(a.shape) == 1:
         if i is None:
             i = 0
         if prev is None:
