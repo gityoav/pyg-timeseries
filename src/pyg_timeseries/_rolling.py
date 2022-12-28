@@ -140,6 +140,8 @@ def _bfill(a, limit = -1):
     """
     _bfill(np.array([np.nan, 1., np.nan])) 
     """
+    if is_num(a):
+        return a
     res = a.copy()
     prev = np.nan
     n = limit
