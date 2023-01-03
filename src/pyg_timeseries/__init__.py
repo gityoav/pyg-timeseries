@@ -21,7 +21,7 @@ from pyg_timeseries._opt import least_squares
 from pyg_timeseries._iter import ts_iterate
 #from pyg_timeseries._linalg import eigenvalues, eigenvectors, det
 from pyg_timeseries._matmul import matmul
-from pyg_timeseries._bar import bar_r2
+from pyg_timeseries._bar import bar_r2, bar_daily_to_eod
 from pyg_timeseries._track import minimize_tracking_error
 from pyg_timeseries._multibuffer import multibuffer, near_correlation_matrix, beta_correlation_matrix
 from pyg_timeseries._zmooth import zmooth, zmooth_

@@ -1,8 +1,66 @@
 import numpy as np
-from pyg_timeseries._rolling import shift
+from pyg_base import calendar
+from pyg_timeseries._rolling import shift, diff
 from pyg_timeseries._ewm import ewma
+import pandas as pd
 
 ln2 = np.log(2)
+
+
+def bar_daily_to_eod(bar, o = 'open', v = 'volume', cal = None, day_start = None, day_end = None):
+    """
+    Constructs an eod-bar from intraday data bar ASSUMING the bar provided at each intraday is actually a daily intraday bar... 
+    i.e. every bar is actually the "day so far" bar.
+    - hence, a day changes when the open changes
+    - or when the volume drops
+    
+    if neither is provided, uses simple date to decide transition.
+    
+    ASSUMPTION: conversion to actual date is done using the calendar.trade_date function.
+    
+    Parameters
+    ----------
+    bar : pd.DataFrame
+        bar timeseries
+    o : str, optional
+        name of the open column, default 'open'.
+    v : str, optional
+        name of the volume colume. The default is 'volume'.
+
+    >>> from pyg import *; from pysys import *
+    >>> bar = pd_read_npy(data_path('bc/ESA Index/2023/H/intraday.npy')); v = 'volume'; o = 'open'; cal = None
+    >>> bar_eod(bar)
+
+    >>> bar = pd_read_npy(data_path('bc/TYA Comdty/2023/H/intraday.npy')); v = 'volume'; o = 'open'; cal = None
+    >>> bar_eod(bar)
+
+    """
+    if not v and not o:
+        mask = diff(bar.index.day.values.astype(float),-1)!=0
+    elif v and o:
+        vmask = diff(bar[v],-1) > 0
+        omask = diff(bar[o],-1)!=0
+        omask.iloc[-1] = False
+        mask = np.maximum(omask, vmask)        
+    elif o:
+        omask = diff(bar[o],-1)!=0
+        omask.iloc[-1] = False
+        mask = omask
+    elif v:
+        mask = vmask = diff(bar[v],-1) > 0
+    
+    eod = bar[mask]
+    cal = calendar(cal)    
+    eod.index = [cal.trade_date(d, adj = 'f', day_start = day_start, day_end = day_end) for d in eod.index] 
+    date_repeated = np.concatenate([eod.index[:-1] == eod.index[1:], np.array([False])])
+    eod = eod[~date_repeated]
+    last_date = cal.trade_date(bar.index[-1], adj = 'f', day_start = day_start, day_end = day_end)
+    if last_date > eod.index[-1]:
+        last_bar = bar.iloc[-1:]
+        last_bar.index = [last_date]
+        eod = pd.concat([eod, last_bar])
+    return eod
+
 
 def bar_r2(bar, o = 'open', h = 'high', l = 'low', c = 'close', model = 'yz', alpha = None, short_range = None, long_range = None):
     """
