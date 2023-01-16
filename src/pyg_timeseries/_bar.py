@@ -33,23 +33,29 @@ def bar_daily_to_eod(bar, o = 'open', v = 'volume', cal = None, day_start = None
 
     >>> bar = pd_read_npy(data_path('bc/TYA Comdty/2023/H/intraday.npy')); v = 'volume'; o = 'open'; cal = None
     >>> bar_eod(bar)
+    >>> o = 'open'; v = 'volume'
 
     """
-    if not v and not o:
-        mask = diff(bar.index.day.values.astype(float),-1)!=0
-    elif v and o:
-        vmask = diff(bar[v],-1) > 0
-        omask = diff(bar[o],-1)!=0
-        omask.iloc[-1] = False
-        mask = np.maximum(omask, vmask)        
-    elif o:
-        omask = diff(bar[o],-1)!=0
-        omask.iloc[-1] = False
-        mask = omask
-    elif v:
-        mask = vmask = diff(bar[v],-1) > 0
-    
-    eod = bar[mask]
+    if len(bar) == 0:
+        return bar
+    elif len(bar) == 1:
+        eod = bar
+    else: #remove duplicates based on open/oi, always keep latest point
+        if not v and not o:
+            mask = diff(bar.index.day.values.astype(float),-1)!=0
+        elif v and o:
+            vmask = diff(bar[v],-1) > 0
+            omask = diff(bar[o],-1)!=0
+            omask.iloc[-1] = False
+            mask = np.maximum(omask, vmask)        
+        elif o:
+            omask = diff(bar[o],-1)!=0
+            omask.iloc[-1] = False
+            mask = omask
+        elif v:
+            mask = vmask = diff(bar[v],-1) > 0  
+        mask.iloc[-1] = True
+        eod = bar[mask]
     cal = calendar(cal)    
     eod.index = [cal.trade_date(d, adj = 'f', day_start = day_start, day_end = day_end) for d in eod.index] 
     date_repeated = np.concatenate([eod.index[:-1] == eod.index[1:], np.array([False])])
