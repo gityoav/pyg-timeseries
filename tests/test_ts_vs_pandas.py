@@ -24,6 +24,10 @@ def _nan_data():
     return [s,df]
 
 
+def test_ts_pandas_match_with_ints():
+    a = pd.Series([1,2,3], drange(2))
+    assert eq(diff(a), a.diff())
+
 def test_ts_pandas_match():
     n2p = dict(ts_mean = lambda a, **kwargs: a.mean(**kwargs),
             ts_sum = lambda a, **kwargs: a.sum(**kwargs),
