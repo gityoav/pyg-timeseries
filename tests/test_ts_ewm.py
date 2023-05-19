@@ -62,3 +62,8 @@ def test_ewmcor():
             assert ts_max(abs(x - y)[20:])<0.05
 
     
+def test_ewm_empty():
+    for a in (np.array([]), pd.Series([],[], dtype = float), pd.DataFrame([],[])):
+        for f in [ewma, ewmstd, ewmrms, ewmskew]:
+            res = f(a, 20)
+            assert eq(res, a)

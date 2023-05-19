@@ -12,6 +12,7 @@ def compiled(function):
 #from pyg.base import passthru; compiled = passthru ## use this to get valid code-coverage for compiled functions
 
 first_ = loop(dict, list)(first)
+second_ = loop(dict, list)(lambda value: value[1])
 
 
 def _data_state(keys, values, output = 'data'):

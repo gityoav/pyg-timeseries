@@ -1,4 +1,5 @@
 from pyg_timeseries import diff, ratio
+from pyg_timeseries import rolling_max, rolling_mean, rolling_median, rolling_quantile, rolling_rank, rolling_rms, rolling_skew, rolling_std, rolling_sum
 from pyg_base import eq, drange
 import pandas as pd
 import numpy as np
@@ -28,3 +29,9 @@ def test_diff():
     d = pd.DataFrame(dict(a = a), drange(9))
     assert eq(diff(d), d.diff())
 
+
+def test_rolling_empty():
+    for a in (np.array([]), pd.Series([],[], dtype = float), pd.DataFrame([],[])):
+        for f in [rolling_max, rolling_mean, rolling_median, rolling_quantile, rolling_rank, rolling_rms, rolling_skew, rolling_std, rolling_sum]:
+            res = f(a, 20)
+            assert eq(res, a)
