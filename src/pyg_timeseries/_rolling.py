@@ -1,7 +1,7 @@
 import numpy as np
 from pyg_timeseries._math import stdev_calculation, skew_calculation, _w
 from pyg_timeseries._decorators import compiled, first_, _data_state
-from pyg_base import pd2np, Dict, is_num, loop_all, loop, clock, is_pd, df_reindex
+from pyg_base import pd2np, Dict, is_num, loop_all, loop, clock, is_pd, df_reindex, max_
 
 __all__ = ['ffill', 'bfill', 'fnna', 'na2v', 'v2na', 'diff', 'shift', 'ratio', 'rolling_mean', 'rolling_sum', 'rolling_rms', 'rolling_std', 'rolling_skew', 
            'diff_', 'shift_', 'ratio_', 'rolling_mean_', 'rolling_sum_', 'rolling_rms_', 'rolling_std_', 'rolling_skew_']
@@ -901,6 +901,7 @@ def buffer_(a, band, unit = 0.0, rounding_band = 0., data = None, instate = None
         instate = Dict(pos = instate)
     elif instate is None:
         instate = Dict(pos = 0.0)
+    band = max_(band)
     if is_num(band):
         band = np.full(a.shape, band)
     if is_num(max_change):
@@ -968,11 +969,20 @@ def buffer(a, band, unit = 0.0, rounding_band = 0., min_change = 0, max_change =
     >>> max_change = pd.Series(np.arange(0.2,0,-0.2/1000), drange(-999))
     >>> ever_slower = buffer(a, band = 0.001, max_change = max_change)
     >>> df_concat([a, slowed, ever_slower], ['orig', 'slowed', 'ever slower']).plot()
+    
+    Example: support for multiple bands:
+    -----------------------------------
+    >>> band = [0.1, pd.Series(np.arange(0.2,0,-0.2/1000), drange(-999))]
+    >>> ever_smaller_buffer = buffer(a, band = band)
+    >>> const_buffer = buffer(a, band = 0.1)
+    >>> df_concat([a, const_buffer, ever_smaller_buffer], ['orig', 'const', 'ever smaller']).plot()
+    
     """
     if is_num(state):
         state = Dict(pos = state)
     elif state is None:
         state = Dict(pos = 0.0)
+    band = max_(band)
     if is_num(band):
         band = np.full(a.shape, band)
     if is_num(max_change):
