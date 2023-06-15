@@ -304,8 +304,8 @@ def ewmcovar_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'out
     arr = df_concat(a, join = join, method = method)
     if isinstance(arr, np.ndarray):
         res, a0, a1, aa0, aa1 = _ewmcovar(arr, n, min_sample = min_sample, bias = bias, **state)
-        if res.shape[1] == 2:
-            res = res[:, 0, 1]
+        # if res.shape[1] == 2:
+        #     res = res[:, 0, 1]
         return dict(data = res, columns = None, index = None, state = dict(a0=a0, a1=a1, aa0=aa0, aa1=aa1))
     elif is_df(arr):
         index = arr.index
@@ -369,8 +369,8 @@ def ewmcorr_(a, n, min_sample = 0.25, bias = False, instate = None, join = 'oute
     arr = df_concat(a, join = join, method = method)
     if isinstance(arr, np.ndarray):
         res, a0, a1, a2, aa0, aa1, w2 = _ewmcorr(arr, n, min_sample = min_sample, bias = bias, **state)
-        if res.shape[1] == 2:
-            res = res[:, 0, 1]
+        # if res.shape[1] == 2:
+        #     res = res[:, 0, 1]
         return dict(data = res, index = None, columns = None, state = dict(a0=a0, a1=a1, a2=a2, aa0=aa0, aa1=aa1, w2 = w2))
     elif is_df(arr):
         index = arr.index
