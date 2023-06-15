@@ -326,9 +326,10 @@ def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0):
                 lb = a[i] - b
                 ub = a[i] + b            
             if pos < lb:
-                res[i] = pos = lb
+                pos = lb
             elif pos > ub:
-                res[i] = pos = ub
+                pos = ub
+            res[i] = pos
     return res, pos
 
 
