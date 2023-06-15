@@ -1,7 +1,7 @@
 import numpy as np
 from pyg_timeseries._math import stdev_calculation, skew_calculation, _w
 from pyg_timeseries._decorators import compiled, first_, _data_state
-from pyg_base import pd2np, Dict, is_num, loop_all, loop, clock, is_pd, df_reindex, max_
+from pyg_base import pd2np, Dict, is_num, loop_all, loop, clock, is_pd, df_reindex, max_, is_list
 
 __all__ = ['ffill', 'bfill', 'fnna', 'na2v', 'v2na', 'diff', 'shift', 'ratio', 'rolling_mean', 'rolling_sum', 'rolling_rms', 'rolling_std', 'rolling_skew', 
            'diff_', 'shift_', 'ratio_', 'rolling_mean_', 'rolling_sum_', 'rolling_rms_', 'rolling_std_', 'rolling_skew_']
@@ -192,19 +192,17 @@ def _ewfill(a, fwd_n, bwd_n = np.nan, prev = np.nan, nxt = np.nan, decay_target 
 @loop_all
 @pd2np
 def _rolling_window(a, window, min_count, func, vec = None, axis = 0):
-    va = a.copy()
+    vec = _vec(a,vec,0,axis=axis)
     mask = ~np.isnan(a)
     na = a[mask]
     n = len(na)
-    if n == 0:
-        return va, va[-1:] if window == 0 else na[-(window-1):]    
-    vec = _vec(a,vec,0,axis=axis)
     if len(vec):
         na = np.concatenate([vec,na])
     w = na.shape[0] if window == 0 else window        
     res = func(na, w, min_count)
     if len(vec):
         res = res[-n:] 
+    va = a.copy()
     va[mask] = res
     return va, va[-1:] if window == 0 else na[-(window-1):]
 
@@ -297,7 +295,7 @@ def _diff1(a, vec, time, i = 0, t = np.nan):
 @loop_all
 @pd2np
 @compiled
-def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0, min_change = 0, max_change = 0, max_value = np.isnan):
+def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0):
     """
     >>> from pyg import * ; from pysys import * 
     >>> a = pd.Series(cumsum(np.random.normal(0,1,10000)), drange(-9999))
@@ -312,56 +310,25 @@ def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0, min_change = 0, max
     >>> tover(sig), tover(b0), tover(b25), tover(b5)
     """
     res = np.full(a.shape, np.nan)
-    rbu = rounding_band * unit
     b = 0
-    mc = 0
     if np.isnan(pos):
         pos = 0.0
     for i in range(a.shape[0]):
         if not np.isnan(a[i]):
             if not np.isnan(band[i]):
                 b = band[i]
-            if not np.isnan(max_change[i]):
-                mc = max_change[i]
-            mv = max_value[i]
-            if pos < a[i] - b:
-                aim = a[i] - b
-                if mc and (aim - pos) > mc:
-                    aim = pos + mc
-                if (aim - pos) > min_change:                    
-                    if unit > 0:
-                        aim_in_units = np.round(aim / unit)
-                        aim = aim_in_units * unit
-                        if aim < a[i] - b and aim + unit < a[i] + b: # don't undershoot
-                            aim = aim + unit
-                        elif aim > a[i] and rbu > b and a[i] - rbu > pos: # don't overshoot
-                            aim = a[i] - rbu
-                            aim = np.round(aim / unit) * unit
-                    if not np.isnan(mv) and mv>=0 :
-                        if unit > 0: 
-                            mv = int(mv / unit) * unit
-                        if aim > mv:
-                            aim = mv
-                    pos = aim
-            elif pos > a[i] + b:
-                aim = a[i] + b
-                if mc and (pos - aim) > mc:
-                    aim = pos - mc
-                if (pos - aim) > min_change:
-                    if unit > 0:
-                        aim = np.round(aim / unit) * unit
-                        if aim > a[i] + b and aim - unit > a[i] - b:
-                            aim = aim - unit
-                        elif aim < a[i] and rbu > b and a[i] + rbu < pos: # don't overshoot
-                            aim = a[i] + rbu
-                            aim = np.round(aim / unit) * unit
-                    if not np.isnan(mv) and mv>=0:
-                        if unit > 0:
-                            mv = int(mv / unit) * unit
-                        if aim < -mv:
-                            aim = -mv
-                    pos = aim                    
-            res[i] = pos
+            if unit: ## we are rounding
+                b_in_unit = max(b / unit, rounding_band)
+                a_in_unit = a[i] / unit
+                lb = round(a_in_unit - b_in_unit) * unit
+                ub = round(a_in_unit + b_in_unit) * unit
+            else:
+                lb = a[i] - b
+                ub = a[i] + b            
+            if pos < lb:
+                res[i] = pos = lb
+            elif pos > ub:
+                res[i] = pos = ub
     return res, pos
 
 
@@ -479,8 +446,8 @@ def _rolling_tover(a, n = 256, interval = None, positions = None, trades = None,
 @pd2np
 @compiled
 def _rolling_mean(a, n, time, t0, t1, vec, i, denom, t = np.nan):
-    res = np.empty_like(a)
     vec = vec.copy()
+    res = np.empty_like(a)
     _n = abs(n)
     s = (0,a.shape[0],1) if n>0 else (a.shape[0]-1,-1,-1)
     for j in range(*s):
@@ -902,26 +869,23 @@ def diff_(a, n=1, time = None, axis = 0, data = None, instate = None):
 
 diff_.output = ['data', 'state']
 
-def buffer_(a, band, unit = 0.0, rounding_band = 0., data = None, instate = None, rms = None, min_change = 0, max_change = 0, max_value = 0):
+def buffer_(a, band, unit = 0.0, rounding_band = 0., data = None, instate = None, rms = None):
     if is_num(instate):
         instate = Dict(pos = instate)
     elif instate is None:
         instate = Dict(pos = 0.0)
-    band = max_(band)
+    if is_list(band):
+        band = max_(band, join = 'oj', method = ['ffill', 'bfill'])
     if is_num(band):
         band = np.full(a.shape, band)
-    if is_num(max_change):
-        max_change = np.full(a.shape, max_change)
-    if is_num(max_value):
-        max_value = np.full(a.shape, max_value)
     if is_num(rms):
         r = rolling_rms(a, rms)
         band = band * 2 * np.exp(-abs(a)/r)
-    return _data_state(['data', 'pos'], _buffer(a = a, band = band, unit = unit, min_change = min_change, max_change = max_change, max_value = max_value, rounding_band = rounding_band, **instate))
+    return _data_state(['data', 'pos'], _buffer(a = a, band = band, unit = unit, rounding_band = rounding_band, **instate))
         
 buffer_.output = ['data', 'state']
 
-def buffer(a, band, unit = 0.0, rounding_band = 0., min_change = 0, max_change = 0, max_value = 0, data = None, state = None, rms = None):
+def buffer(a, band, unit = 0.0, rounding_band = 0., data = None, state = None, rms = None):
     """
     buffer performs two functions:
         - ensures the result is stated in 'units' so if unit == 1, output is integers
@@ -956,66 +920,26 @@ def buffer(a, band, unit = 0.0, rounding_band = 0., min_change = 0, max_change =
         band size
     unit: float
         the resulting timeseries will always be whole number of units
-    min_change: float
-        if change in value is less than that, don't bother
-    max_change: float/timeseries
-        if positive, and change is value is more than this, cap it.
-    max_value: float/timeseries
-        needs to be non-nan and non-negative. If provided, ensures value is below maximum_value
-        
     data: None.
         unused at the moment. 
     state: dict, float, optional
         state parameters of last position, used to instantiate the internal calculations, based on history prior to 'a' provided. 
         please provide the variable "pos" if a dict, or just a float, indicating previous position.
-        
-    :Example: min_change and max_change
-    ---------
-    >>> from pyg import *     
-    >>> from pyg_timeseries import ewma
-    >>> a = pd.Series(np.random.normal(0,1,1000), drange(-999))
-    >>> assert set(buffer(a, band = 0.1, min_change = 10).values) == {0.0}
-    >>> a = ewma(a, 10)
-    >>> slowed = buffer(a, band = 0.1, max_change = 0.1)    
-    >>> assert abs(diff(slowed).abs().max() - 0.1) < 1e-6
-    >>> max_change = pd.Series(np.arange(0.2,0,-0.2/1000), drange(-999))
-    >>> ever_slower = buffer(a, band = 0.001, max_change = max_change)
-    >>> df_concat([a, slowed, ever_slower], ['orig', 'slowed', 'ever slower']).plot()
-    
-    Example: support for multiple bands:
-    -----------------------------------
-    >>> band = [0.1, pd.Series(np.arange(0.2,0,-0.2/1000), drange(-999))]
-    >>> ever_smaller_buffer = buffer(a, band = band)
-    >>> const_buffer = buffer(a, band = 0.1)
-    >>> df_concat([a, const_buffer, ever_smaller_buffer], ['orig', 'const', 'ever smaller']).plot()
-
-    Example: support for max_value:
-    -----------------------------------
-    >>> ts01 = buffer(a, band = 0.05, max_value = 0.1)
-    >>> assert ts01.min() == -0.1 and ts01.max() == 0.1
-    >>> max_value = pd.Series(np.arange(0.0,0.50,0.5/1000), drange(-999))
-    >>> moving_max = buffer(a, band = 0.05, max_value = max_value, state = 0.0)
-    >>> moving_max.plot()
-    >>> assert np.all(moving_max.abs() <= max_value)
-
     """
     if is_num(state):
         state = Dict(pos = state)
     elif state is None:
         state = Dict(pos = 0.0)
-    band = max_(band)
+    if is_list(band):
+        band = max_(band, join = 'oj', method = ['ffill', 'bfill'])
     if is_num(band):
         band = np.full(a.shape, band)
-    if is_num(max_change):
-        max_change = np.full(a.shape, max_change)
-    if is_num(max_value):
-        max_value = np.full(a.shape, max_value)
     if is_pd(band) and is_pd(a):
         band = df_reindex(band, a, method = 'ffill')
     if is_num(rms):
         r = rolling_rms(a, rms)
         band = band * 2 * np.exp(-abs(a)/r)
-    return first_(_buffer(a = a, band = band, unit = unit, min_change = min_change, max_change = max_change, max_value = max_value, rounding_band = rounding_band, **state))
+    return first_(_buffer(a = a, band = band, unit = unit, rounding_band = rounding_band, **state))
     
         
 
