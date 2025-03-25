@@ -243,9 +243,10 @@ def _ewmcorrelation(a, n, a0 = None, a1 = None, a2 = None, aa = None, prev = Non
     w2 = np.zeros((m,m)) if w2 is None else w2
     for i in range(a.shape[0]):
         for j in range(m):
-            res[i, j, j] = 1.
-        for j in range(m):
             if ~np.isnan(a[i,j]):
+                a0[j,j] = a0[j,j] * p + v
+                if a0[j,j] > min_sample:
+                    res[i,j,j] = 1.0
                 for k in range(j):
                     if ~np.isnan(a[i,k]):
                         if ~np.isnan(prev[j,k,-1]) and ~np.isnan(prev[k,j,-1]):
@@ -261,7 +262,7 @@ def _ewmcorrelation(a, n, a0 = None, a1 = None, a2 = None, aa = None, prev = Non
                             res[i, k, j] = res[i, j, k] = corr_calculation_ewm(a0 = a0[j,k], a1 = a1[j,k], a2 = a2[j,k], aw2 = w2[j,k], 
                                                                                b0 = a0[k,j], b1 = a1[k,j], b2 = a2[k,j], bw2 = w2[k,j],
                                                                                ab = aa[j,k], ab0 = a0[j,k],
-                                                                               min_sample = min_sample, bias = bias)
+                                                                               min_sample = min_sample, bias = bias) 
                         if overlapping > 1:
                             prev[j,k,1:] = prev[j,k,:-1]
                             prev[k,j,1:] = prev[k,j,:-1]
