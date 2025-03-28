@@ -5,6 +5,8 @@ import pandas as pd; import numpy as np
 t = dt(2021,3,1)
 cal = calendar('US')
 
+    
+
 def test_ewm_monthly():    
     months = drange('-500m', t, '1m')
     a = pd.Series(np.random.normal(0,1,501), months)
