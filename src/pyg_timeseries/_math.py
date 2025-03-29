@@ -30,13 +30,11 @@ def std_calculation(t0, t1, t2, default = np.nan):
 
 
 @compiled
-def stdev_calculation_ewm(t0, t1, t2, w2, min_sample, bias = False):
+def stdev_calculation_ewm(t0, t1, t2, w2, bias = False):
     """
     The nicest calculation of unbiased variance under variable weights is available here:
     https://mathoverflow.net/questions/11803/unbiased-estimate-of-the-variance-of-a-weighted-mean
     """
-    if t0<=min_sample:
-        return np.nan
     variance = t2/t0 - (t1/t0)**2
     if variance<0:
         return np.nan
@@ -47,13 +45,13 @@ def stdev_calculation_ewm(t0, t1, t2, w2, min_sample, bias = False):
         return np.sqrt(variance/r)
 
 @compiled
-def variance_calculation_ewm(t0, t1, t2, w2, min_sample, bias = False):
+def variance_calculation_ewm(t0, t1, t2, w2, bias = False):
     """
     The nicest calculation of unbiased variance under variable weights is available here:
     https://mathoverflow.net/questions/11803/unbiased-estimate-of-the-variance-of-a-weighted-mean
+    
+    w2 = E(weights^2)
     """
-    if t0<=min_sample:
-        return np.nan
     variance = t2/t0 - (t1/t0)**2
     if variance<0:
         return np.nan
@@ -65,9 +63,7 @@ def variance_calculation_ewm(t0, t1, t2, w2, min_sample, bias = False):
 
 
 @compiled
-def cor_calculation(t0, a1, a2, b1, b2, ab, min_sample):
-    if t0<=min_sample:
-        return np.nan
+def cor_calculation(t0, a1, a2, b1, b2, ab):
     Eab = ab/t0
     Ea = a1/t0
     Eb = b1/t0
@@ -81,14 +77,12 @@ def cor_calculation(t0, a1, a2, b1, b2, ab, min_sample):
 
 
 @compiled
-def cor_calculation_ewm(t0, a1, a2, b1, b2, w2, ab, min_sample, bias = False):
-    if t0<=min_sample:
-        return np.nan
+def cor_calculation_ewm(t0, a1, a2, b1, b2, w2, ab, bias = False):
     Eab = ab/t0
     Ea = a1/t0
     Eb = b1/t0
-    STDa = stdev_calculation_ewm(t0, a1, a2, w2, min_sample = min_sample, bias = bias)
-    STDb = stdev_calculation_ewm(t0, b1, b2, w2, min_sample = min_sample, bias = bias)
+    STDa = stdev_calculation_ewm(t0, a1, a2, w2, bias = bias)
+    STDb = stdev_calculation_ewm(t0, b1, b2, w2, bias = bias)
     denom = STDa * STDb
     if denom > 0:
         return (Eab - Ea*Eb)/denom
@@ -96,10 +90,9 @@ def cor_calculation_ewm(t0, a1, a2, b1, b2, w2, ab, min_sample, bias = False):
         return np.nan
 
 
+
 @compiled
-def covariance_calculation(ab0, a0, a1, b0, b1, ab, min_sample, bias = False):
-    if ab0<=min_sample or a0<=min_sample or b0<=min_sample:
-        return np.nan
+def covariance_calculation(ab0, a0, a1, b0, b1, ab, bias = False):
     Eab = ab/ab0
     Ea = a1/a0
     Eb = b1/b0
@@ -107,30 +100,11 @@ def covariance_calculation(ab0, a0, a1, b0, b1, ab, min_sample, bias = False):
 
 
 @compiled
-def corr_calculation_ewm(ab0, a0, a1, a2, aw2, b0, b1, b2, bw2, ab, min_sample, bias = False):
-    if ab0<=min_sample or a0<=min_sample or b0<=min_sample:
-        return np.nan
-    Eab = ab/ab0
-    Ea = a1/a0
-    Eb = b1/b0
-    STDa = stdev_calculation_ewm(a0, a1, a2, aw2, min_sample = min_sample, bias = bias)
-    STDb = stdev_calculation_ewm(b0, b1, b2, bw2, min_sample = min_sample, bias = bias)
-    denom = STDa * STDb
-    if denom > 0:
-        return (Eab - Ea*Eb)/denom
-    else:
-        return np.nan
-
-
-
-@compiled
-def LR_calculation_ewm(t0, a1, a2, b1, b2, w2, ab, min_sample, bias = False):
-    if t0<=min_sample:
-        return np.nan, np.nan
+def LR_calculation_ewm(t0, a1, a2, b1, b2, w2, ab, bias = False):
     Eab = ab/t0
     Ea = a1/t0
     Eb = b1/t0
-    VARa = variance_calculation_ewm(t0, a1, a2, w2, min_sample = min_sample, bias = bias)
+    VARa = variance_calculation_ewm(t0, a1, a2, w2, bias = bias)
     if VARa > 0:
         covar = Eab - Ea*Eb
         m = covar/VARa
@@ -140,16 +114,14 @@ def LR_calculation_ewm(t0, a1, a2, b1, b2, w2, ab, min_sample, bias = False):
         return np.nan, np.nan
     
 @compiled
-def skew_calculation(t0, t1, t2, t3, bias, min_sample):
-    if t0<=max(min_sample,2):
-        return np.nan
+def skew_calculation(t0, t1, t2, t3, bias):
     t0 = t0 * 1.
     m1 = t1 / t0
     m2 = t2 / t0 - m1 ** 2
     if m2 > 0:
         m3 = (t3/t0 - 3 * m1 * t2 / t0 + 2 * (m1**3))
         biased = m3 / (m2**1.5)
-        if bias:
+        if bias or t0 <= 2:
             return biased
         else:
             return biased  * np.sqrt(t0 * (t0-1)) / (t0-2) 

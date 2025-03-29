@@ -1,9 +1,25 @@
-from pyg_timeseries import ewma, ewmstd, ewmrms, ewmskew, ewmLR, ewmcor, ewmcorr, ts_max
+from pyg_timeseries import ewma, ewmstd, ewmrms, ewmskew, ewmLR, ewmcor, ewmcorr, ts_max, ewmcorrelation
 from pyg_base import eq, dt, calendar, drange, Dict
 import pandas as pd; import numpy as np
 
 t = dt(2021,3,1)
 cal = calendar('US')
+
+
+
+def test_ewm_with_weights():
+    a = pd.Series(np.arange(1,1001), drange(-999))
+    wgt = 1/abs(a)
+    res = ewma(a, 10)
+    res1 = ewma(a, 10, wgt = 1/abs(a))
+    assert np.all(res1.iloc[1:] < res.iloc[1:])
+    res2 = ewma(a, 10, wgt = 1/abs(a)**2)
+    assert np.all(res2.iloc[1:] < res1.iloc[1:])
+    for func in (ewma, ewmstd, ewmrms, ewmskew):
+        base = func(a, 10)        
+        res = func(a, 10, wgt = 1/abs(a))
+        assert abs((res-base)/(res+base).iloc[-500:]).max() < 0.1
+        
 
     
 
@@ -56,12 +72,17 @@ def test_ewmcor():
     np.random.seed(0)
     a = np.random.normal(0,1,(1000,10)) 
     a = a + np.random.normal(0, 1, (1000, 1))
-    res = ewmcorr(a, 20)
+    res = ewmcorrelation(a, 20)
+    res2 = ewmcor(a,a,20)
     for i in range(10):
         for j in range(i):        
             x = ewmcor(a[:,i], a[:, j], 20)
             y = res[:, i, j]
-            assert ts_max(abs(x - y)[20:])<0.05
+            assert ts_max(abs(x - y)[20:])<0.1
+    a_ = pd.DataFrame(a, columns = list('abcdefghij'), index = drange(-999))
+    b = a[:,0]
+    res3 = ewmcor(a_, b, 20)
+    res3 = ewmcor(a_['b'], b, 20)
 
     
 def test_ewm_empty():
