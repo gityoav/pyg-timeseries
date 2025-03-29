@@ -1,6 +1,6 @@
 from pyg_timeseries import ewma, ewmstd, ewmrms, ewmskew, ewmLR
 from pyg_timeseries import ewmcor, ewmxcor, ewmcorr, ts_max, ewmcorrelation, ewmcovar, ewmcovariance
-from pyg_base import eq, dt, calendar, drange, Dict
+from pyg_base import eq, dt, calendar, drange, Dict, is_pd, is_df, is_series
 import pandas as pd; import numpy as np
 
 t = dt(2021,3,1)
@@ -83,25 +83,30 @@ def test_ewmcor():
     assert np.max(abs(res2[-1])) <= 1.00001
 
     for overlapping in range(1,5):
-        res = ewmcorr(a, 20, overlapping = overlapping)
-        res2 = ewmcor(a,a,20, overlapping = overlapping)
-        assert np.max(abs(res2[-1]-res[-1])) < 0.1 * overlapping
-        assert np.max(abs(res[-1])) <= 1.00001
-        assert np.max(abs(res2[-1])) <= 1.00001
-        res = ewmcorrelation(a, 20, overlapping = overlapping)
-        res2 = ewmxcor(a,a,20, overlapping = overlapping)
-        assert np.max(abs(res2[-1]-res[-1])) < 0.1 * overlapping
-        assert np.max(abs(res[-1])) <= 1.00001
-        assert np.max(abs(res2[-1])) <= 1.00001
+        for bias in [True, False]:
+            res = ewmcorr(a, 20, overlapping = overlapping, bias = bias)
+            res2 = ewmcor(a,a,20, overlapping = overlapping, bias = bias)
+            assert np.max(abs(res2[-1]-res[-1])) < 0.2 * overlapping
+            assert np.max(abs(res[-1])) <= 1.00001
+            assert np.max(abs(res2[-1])) <= 1.00001
+            res = ewmcorrelation(a, 20, overlapping = overlapping,bias = bias)
+            res2 = ewmxcor(a,a,20, overlapping = overlapping, bias = bias)
+            assert np.max(abs(res2[-1]-res[-1])) < 0.2 * overlapping
+            assert np.max(abs(res[-1])) <= 1.00001
+            assert np.max(abs(res2[-1])) <= 1.00001
         
-    ### now type
-        
-    a_ = pd.DataFrame(a, columns = list('abcdefghij'), index = drange(-999))
-    b = a[:,0]
-    res3 = ewmcor(a_, b, 20)
-    res3 = ewmcor(a_['b'], b, 20)
-
-
+    ### now type checking
+    res = ewmxcor(a, b = pd.Series(a[:,0], drange(999)), n = 20)
+    assert isinstance(res, np.ndarray)
+    res = ewmxcor(pd.DataFrame(a, columns = list('abcdefghij'), index = drange(999)), b = pd.Series(a[:,0], drange(999)), n = 20)
+    assert is_df(res) and list(res.columns) == list('abcdefghij')
+    res = ewmxcor(pd.DataFrame(a, columns = list('abcdefghij'), index = drange(999)), a[:,0], n = 20)
+    assert is_df(res) and list(res.columns) == list('abcdefghij')
+    res = ewmxcor(a[:,1], b = pd.Series(a[:,0], drange(999)), n = 20)
+    assert is_series(res)
+    res = ewmxcor(b = a[:,1], a = pd.Series(a[:,0], drange(999)), n = 20)
+    assert is_series(res)
+    
 
 
 

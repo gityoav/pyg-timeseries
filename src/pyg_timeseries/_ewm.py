@@ -161,7 +161,7 @@ def _ewmxcor(a, b, n, wgt, a1 = None, a2 = None, b1 = None, b2 = None, ab = None
                             dx = a[i,j] - prev_a[j,k,-1]
                             dy = b[i,k] - prev_b[j,k,-1]
                             w1[j,k] = w1[j,k] * p + v[i]
-                            w2[j,k] = w2[j,k] * p**2 + v[i]**2       
+                            w2[j,k] = w2[j,k] * p**2 + v[i]**2        
                             n0[j,k] = n0[j,k] * p + (1-w)
                             a1[j,k] = a1[j,k] * p + v[i] * dx
                             b1[j,k] = b1[j,k] * p + v[i] * dy
@@ -1254,7 +1254,7 @@ def ewmstd(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None
     return first_(_ewmstdt(a, n = n, wgt = wgt, time = time, min_sample=min_sample, bias = bias, axis=axis, exc_zero = exc_zero, max_move = max_move,  calculator = stdev_calculation_ewm, **state))
 
 
-def ewmvar_(a, n, time = None, min_sample=0.25, bias = False, axis=0, exc_zero = False, data = None, instate = None, wgt = None):
+def ewmvar_(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = False, data = None, instate = None, wgt = None):
     """
     Equivalent to ewmvar but returns a state parameter for instantiation of later calculations.
     See ewmvar documentation for more details
@@ -1263,7 +1263,7 @@ def ewmvar_(a, n, time = None, min_sample=0.25, bias = False, axis=0, exc_zero =
     max_move = 0
     return _data_state(['data', 't', 't0', 't1', 't2', 'w2'],_ewmstdt(a, n = n, wgt = wgt, time = time, min_sample=min_sample, axis=axis, exc_zero = exc_zero, max_move = max_move, calculator = variance_calculation_ewm, **state))
 
-def ewmvar(a, n, time = None, min_sample=0.25, bias = False, axis=0, exc_zero = False, data = None, state = None, wgt = None):
+def ewmvar(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = False, data = None, state = None, wgt = None):
     """
     ewmstd is equivalent to a.ewm(n).var() but with...
     - supports np.ndarrays as well as timeseries
@@ -1353,7 +1353,7 @@ def ewmvar(a, n, time = None, min_sample=0.25, bias = False, axis=0, exc_zero = 
 ewmstd_.output = ['data', 'state']
 
 
-def ewmxcor_(a, b, n, min_sample = 0.25, bias = False, data = None, instate = None, wgt = None, overlapping = 1, join = 'outer', method = None):
+def ewmxcor_(a, b, n, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, overlapping = 1, join = 'outer', method = None):
     """
     Equivalent to ewmxcor but returns a state parameter for instantiation of later calculations.
     See ewmxcor documentation for more details
@@ -1381,7 +1381,7 @@ def ewmxcor_(a, b, n, min_sample = 0.25, bias = False, data = None, instate = No
 
 ewmxcor_.output = ['data', 'state']
 
-def ewmcor_(a, b, n, min_sample = 0.25, bias = False, data = None, instate = None, wgt = None, overlapping = 1, join = 'outer', method = None):
+def ewmcor_(a, b, n, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, overlapping = 1, join = 'outer', method = None):
     """
     Equivalent to ewmcor but returns a state parameter for instantiation of later calculations.
     See ewmcor documentation for more details
@@ -1393,7 +1393,7 @@ def ewmcor_(a, b, n, min_sample = 0.25, bias = False, data = None, instate = Non
 
 ewmcor_.output = ['data', 'state']
 
-def ewmxcor(a, b, n, min_sample = 0.25, bias = False, data = None, state = None, wgt = None, overlapping = 1):
+def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, wgt = None, overlapping = 1):
     """
     calculates pair-wise correlation between a and b returns, assuming a and b are TOTAL returns
     
@@ -1435,7 +1435,7 @@ def ewmxcor(a, b, n, min_sample = 0.25, bias = False, data = None, state = None,
     return ewmxcor_(a = a, b = b, n = n, min_sample = min_sample, bias = bias, data = data, instate = state, wgt = wgt, overlapping = 1).get('data')
 
 
-def ewmcor(a, b, n, min_sample = 0.25, bias = False, data = None, state = None, wgt = None, overlapping = 1):
+def ewmcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, wgt = None, overlapping = 1):
     """
     calculates pair-wise correlation between a and b returns.
     
@@ -1490,7 +1490,7 @@ def ewmcor(a, b, n, min_sample = 0.25, bias = False, data = None, state = None, 
     return ewmxcor_(a = cumsum(a), b = cumsum(b), n = n, min_sample = min_sample, bias = bias, data = data, instate = state, wgt = wgt, overlapping = overlapping)['data']
 
 
-def ewmGLM_(a, b, n, time = None, min_sample = 0.25, bias = False, data = None, instate = None, wgt = None):
+def ewmGLM_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None):
     """
     Equivalent to ewmGLM but returns a state parameter for instantiation of later calculations.
     See ewmGLM documentation for more details
@@ -1501,7 +1501,7 @@ def ewmGLM_(a, b, n, time = None, min_sample = 0.25, bias = False, data = None, 
 ewmGLM_.output = ['data', 'state']
 
 
-def ewmGLM(a, b, n, time = None, min_sample = 0.25, bias = False, data = None, state = None, wgt = None):
+def ewmGLM(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, state = None, wgt = None):
     """
     Calculates a General Linear Model fitting b to a.
     
@@ -1560,7 +1560,7 @@ def ewmGLM(a, b, n, time = None, min_sample = 0.25, bias = False, data = None, s
 
 
 
-def ewmLR_(a, b, n, time = None, min_sample = 0.25, bias = False, axis = 0, c = None, m = None, instate = None, wgt = None):
+def ewmLR_(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = None, m = None, instate = None, wgt = None):
     """
     Equivalent to ewmcor but returns a state parameter for instantiation of later calculations.
     See ewmcor documentation for more details
@@ -1572,7 +1572,7 @@ def ewmLR_(a, b, n, time = None, min_sample = 0.25, bias = False, axis = 0, c = 
 
 ewmLR_.output = ['c', 'm', 'state']
 
-def ewmLR(a, b, n, time = None, min_sample = 0.25, bias = False, axis = 0, c = None, m = None, state = None, wgt = None):
+def ewmLR(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = None, m = None, state = None, wgt = None):
     """
     calculates pair-wise linear regression between a and b.
     We have a and b for which we want to fit:
