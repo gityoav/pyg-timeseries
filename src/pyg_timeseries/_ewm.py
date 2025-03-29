@@ -113,6 +113,7 @@ def _ewmstd(a, n, time, wgt, t = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sam
             res[i] = np.nan if n0 < min_sample else calculator(t0, t1, t2, w2 = w2, bias = bias)
     return res, t, t0, t1, t2, w2
 
+
 def _prev(prev, shape):
     if prev is None:
         return np.full(shape, np.nan)
@@ -124,7 +125,8 @@ def _prev(prev, shape):
 
 
 @compiled
-def _ewmxcor(a, b, n, wgt, a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1):
+def _ewmxcor(a, b, n, wgt, a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, 
+             w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1):
     """
     cross-sectional correlation of a and b
     
@@ -140,8 +142,8 @@ def _ewmxcor(a, b, n, wgt, a1 = None, a2 = None, b1 = None, b2 = None, ab = None
     p = w = _w(n)
     v = (1 - w) * wgt
     res = np.full((a.shape[0], x, y), np.nan)
-    prev_a = _prev(prev_a, (x,y,overlapping))
-    prev_b = _prev(prev_b, (x,y,overlapping))
+    prev_a = np.full((x,y,overlapping), np.nan) if prev_a is None else prev_a
+    prev_b = np.full((x,y,overlapping), np.nan) if prev_b is None else prev_b
     a1 = np.zeros((x,y)) if a1 is None else a1
     a2 = np.zeros((x,y)) if a2 is None else a2
     b1 = np.zeros((x,y)) if b1 is None else b1
@@ -162,7 +164,7 @@ def _ewmxcor(a, b, n, wgt, a1 = None, a2 = None, b1 = None, b2 = None, ab = None
                             w2[j,k] = w2[j,k] * p**2 + v[i]**2       
                             n0[j,k] = n0[j,k] * p + (1-w)
                             a1[j,k] = a1[j,k] * p + v[i] * dx
-                            b1[j,k] = b1[j,j] * p + v[i] * dy
+                            b1[j,k] = b1[j,k] * p + v[i] * dy
                             a2[j,k] = a2[j,k] * p + v[i] * dx ** 2        
                             b2[j,k] = b2[j,k] * p + v[i] * dy ** 2                                
                             ab[j,k] = ab[j,k] * p + v[i] * dx * dy
@@ -202,7 +204,7 @@ def _ewmcorrelation(a, n, wgt, a0 = None, a1 = None, a2 = None, aa = None, prev 
     p = w = _w(n)
     v = (1 - w) * wgt
     res = np.full((a.shape[0], m, m), np.nan)
-    prev = _prev(prev, (m,m,overlapping))
+    
     a0 = np.zeros((m,m)) if a0 is None else a0
     a1 = np.zeros((m,m)) if a1 is None else a1
     a2 = np.zeros((m,m)) if a2 is None else a2
@@ -259,7 +261,7 @@ def _ewmcovariance(a, n, wgt, a0 = None, a1 = None, aa = None, prev = None, n0 =
     p = w = _w(n)
     v = (1 - w) * wgt
     res = np.full((a.shape[0], m, m), np.nan)
-    prev = _prev(prev, (m,m,overlapping))
+    prev = np.full((m,m,overlapping), np.nan) if prev is None else prev
     a0 = np.zeros((m,m)) if a0 is None else a0
     a1 = np.zeros((m,m)) if a1 is None else a1
     aa = np.zeros((m,m)) if aa is None else aa
@@ -309,6 +311,7 @@ def ewmcovariance_(a, n, min_sample = 0.25, bias = False, overlapping = 1, insta
     arr = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
     if wgt is None:
         wgt = np.full(arr.shape[0], 1)
+    state['prev'] = _prev(state.get('prev'), (arr.shape[1],arr.shape[1],overlapping))
     if isinstance(arr, np.ndarray):
         res, a0, a1, aa, prev, n0 = _ewmcovariance(arr, n, wgt = wgt, min_sample = min_sample, bias = bias, overlapping = overlapping, **state)
         state = dict(a0=a0, a1=a1, aa=aa, prev = prev, n0 = n0)
@@ -554,6 +557,7 @@ def ewmcorrelation_(a, n, min_sample = 0.25, bias = False, overlapping = 1, inst
     arr = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
     if wgt is None:
         wgt = np.full(arr.shape[0], 1)
+    state['prev'] = _prev(state.get('prev'), (arr.shape[1],arr.shape[1],overlapping))
     if isinstance(arr, np.ndarray):
         res, a0, a1, a2, aa, prev, w2, n0 = _ewmcorrelation(arr, wgt = wgt, n = n, min_sample = min_sample, bias = bias, overlapping = overlapping, **state)
         state = dict(a0=a0, a1=a1, a2=a2, aa=aa, prev = prev, w2 = w2, n0 = n0)
@@ -826,7 +830,9 @@ def _ewmstdt(a, n, wgt = None, time = None, t = None, t0 = 0, t1 = 0, t2 = 0, w2
 
 
 @pd2np
-def _ewmxcort(a, b, n, wgt = None, a1 = None, a2 = None, b1 = None, b2 = None, ab = None, w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False):
+def _ewmxcort(a, b, n, wgt = None, a1 = None, a2 = None, b1 = None, b2 = None, 
+              ab = None, w1 = None, w2 = None, n0 = None, prev_a = None, prev_b = None, 
+              min_sample = 0.25, bias = False, overlapping = 1):
     """
     a1 = None; a2 = None; b1 = None; b2 = None; ab = None; w1 = None; w2 = None; n0 = None; min_sample = 0.25; bias = False
     """
@@ -837,9 +843,14 @@ def _ewmxcort(a, b, n, wgt = None, a1 = None, a2 = None, b1 = None, b2 = None, a
         a = np.reshape(a, (a.shape[0],1))
     if reshape_b:
         b = np.reshape(b, (b.shape[0],1))
+
+    prev_a = _prev(prev_a, (a.shape[1], b.shape[1], overlapping))
+    prev_b = _prev(prev_b, (a.shape[1], b.shape[1], overlapping))
+        
     res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0 = _ewmxcor(a = a, b = b, n = n, wgt = wgt, 
-                   a1 = a1, a2 = a2, b1 = b1, b2 = b2, w1 = w1, w2 = w2, n0 = n0,
-                   ab = ab, min_sample=min_sample, bias = bias)
+                   a1 = a1, a2 = a2, b1 = b1, b2 = b2, w1 = w1, w2 = w2, n0 = n0, prev_a = prev_a, prev_b = prev_b,
+                   ab = ab, min_sample=min_sample, bias = bias, overlapping = overlapping)
+
     reshape_a = res.shape[1] == 1
     reshape_b = res.shape[2] == 1
     if reshape_a and reshape_b:
@@ -1342,7 +1353,7 @@ def ewmvar(a, n, time = None, min_sample=0.25, bias = False, axis=0, exc_zero = 
 ewmstd_.output = ['data', 'state']
 
 
-def ewmxcor_(a, b, n, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, join = 'outer', method = None):
+def ewmxcor_(a, b, n, min_sample = 0.25, bias = False, data = None, instate = None, wgt = None, overlapping = 1, join = 'outer', method = None):
     """
     Equivalent to ewmxcor but returns a state parameter for instantiation of later calculations.
     See ewmxcor documentation for more details
@@ -1354,7 +1365,7 @@ def ewmxcor_(a, b, n, min_sample = 0.25, bias = True, data = None, instate = Non
         wgt = np.full(a.shape[0], 1)
     a_ = a.values if is_pd(a) else a
     b_ = b.values if is_pd(b) else b
-    res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0 = _ewmxcort(a = a_, b = b_, n = n, wgt = wgt, min_sample=min_sample, bias = bias, **state)
+    res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0 = _ewmxcort(a = a_, b = b_, n = n, wgt = wgt, min_sample=min_sample, bias = bias, overlapping = overlapping, **state)
     state = dict(a1=a1, a2=a2, b1 = b1, b2 = b2, ab=ab, prev_a = prev_a, prev_b = prev_b, w1 = w1, w2 = w2, n0 = n0)
     if len(res.shape) == 2:
         if is_pd(a) and res.shape == a.shape:
@@ -1370,7 +1381,7 @@ def ewmxcor_(a, b, n, min_sample = 0.25, bias = True, data = None, instate = Non
 
 ewmxcor_.output = ['data', 'state']
 
-def ewmcor_(a, b, n, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, join = 'outer', method = None):
+def ewmcor_(a, b, n, min_sample = 0.25, bias = False, data = None, instate = None, wgt = None, overlapping = 1, join = 'outer', method = None):
     """
     Equivalent to ewmcor but returns a state parameter for instantiation of later calculations.
     See ewmcor documentation for more details
@@ -1378,11 +1389,11 @@ def ewmcor_(a, b, n, min_sample = 0.25, bias = True, data = None, instate = None
     state = dict(prev_a = 0., prev_b = 0.) if instate is None else instate
     a = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
     b = df_concat(b, join = join, method = method) if isinstance(b, (list,dict)) else b
-    return ewmxcor_(a = cumsum(a), b = cumsum(b), n = n, min_sample = min_sample, bias = bias, data = data, instate = state, wgt = wgt)
+    return ewmxcor_(a = cumsum(a), b = cumsum(b), n = n, min_sample = min_sample, bias = bias, data = data, instate = state, wgt = wgt, overlapping = overlapping)
 
 ewmcor_.output = ['data', 'state']
 
-def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, wgt = None):
+def ewmxcor(a, b, n, min_sample = 0.25, bias = False, data = None, state = None, wgt = None, overlapping = 1):
     """
     calculates pair-wise correlation between a and b returns, assuming a and b are TOTAL returns
     
@@ -1421,10 +1432,10 @@ def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, 
     :Example: nan handling
     ----------------------    
     """
-    return ewmxcor_(a = a, b = b, n = n, min_sample = min_sample, bias = bias, data = data, instate = state, wgt = wgt)['data']
+    return ewmxcor_(a = a, b = b, n = n, min_sample = min_sample, bias = bias, data = data, instate = state, wgt = wgt, overlapping = 1).get('data')
 
 
-def ewmcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, wgt = None):
+def ewmcor(a, b, n, min_sample = 0.25, bias = False, data = None, state = None, wgt = None, overlapping = 1):
     """
     calculates pair-wise correlation between a and b returns.
     
@@ -1436,8 +1447,8 @@ def ewmcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, w
         The number or days (or a ratio) to scale the history
     min_sample : floar, optional
         minimum weight of observations before we return a reading. The default is 0.25. This ensures that we don't get silly numbers due to small population.
-    bias : book, optional
-        vol estimation for a and b should really by unbiased. Nevertheless, we track pandas and set bias = True as a default.
+    bias : bool, optional, 
+        bias in vol estimation. default False. Pandas default is True
     data : place holder, ignore, optional
         ignore. The default is None.
     state : dict, optional
@@ -1476,10 +1487,10 @@ def ewmcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, w
     """
     if not state:
         state = dict(prev_a = 0., prev_b = 0.)
-    return ewmxcor_(a = cumsum(a), b = cumsum(b), n = n, min_sample = min_sample, bias = bias, data = data, instate = state, wgt = wgt)['data']
+    return ewmxcor_(a = cumsum(a), b = cumsum(b), n = n, min_sample = min_sample, bias = bias, data = data, instate = state, wgt = wgt, overlapping = overlapping)['data']
 
 
-def ewmGLM_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None):
+def ewmGLM_(a, b, n, time = None, min_sample = 0.25, bias = False, data = None, instate = None, wgt = None):
     """
     Equivalent to ewmGLM but returns a state parameter for instantiation of later calculations.
     See ewmGLM documentation for more details
@@ -1490,7 +1501,7 @@ def ewmGLM_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, i
 ewmGLM_.output = ['data', 'state']
 
 
-def ewmGLM(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, state = None, wgt = None):
+def ewmGLM(a, b, n, time = None, min_sample = 0.25, bias = False, data = None, state = None, wgt = None):
     """
     Calculates a General Linear Model fitting b to a.
     
@@ -1549,7 +1560,7 @@ def ewmGLM(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, st
 
 
 
-def ewmLR_(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = None, m = None, instate = None, wgt = None):
+def ewmLR_(a, b, n, time = None, min_sample = 0.25, bias = False, axis = 0, c = None, m = None, instate = None, wgt = None):
     """
     Equivalent to ewmcor but returns a state parameter for instantiation of later calculations.
     See ewmcor documentation for more details
@@ -1561,7 +1572,7 @@ def ewmLR_(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = N
 
 ewmLR_.output = ['c', 'm', 'state']
 
-def ewmLR(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = None, m = None, state = None, wgt = None):
+def ewmLR(a, b, n, time = None, min_sample = 0.25, bias = False, axis = 0, c = None, m = None, state = None, wgt = None):
     """
     calculates pair-wise linear regression between a and b.
     We have a and b for which we want to fit:
@@ -1593,7 +1604,7 @@ def ewmLR(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = No
             - the ewm calculation on each intraday observation is same as an ewm(past EOD + current intraday observation)
     min_sample : floar, optional
         minimum weight of observations before we return a reading. The default is 0.25. This ensures that we don't get silly numbers due to small population.
-    bias : book, optional
+    bias : bool, optional
         vol estimation for a and b should really by unbiased. Nevertheless, we track pandas and set bias = True as a default.
     axis : int, optional
         axis of calculation. The default is 0.

@@ -1,4 +1,5 @@
-from pyg_timeseries import ewma, ewmstd, ewmrms, ewmskew, ewmLR, ewmcor, ewmcorr, ts_max, ewmcorrelation
+from pyg_timeseries import ewma, ewmstd, ewmrms, ewmskew, ewmLR
+from pyg_timeseries import ewmcor, ewmxcor, ewmcorr, ts_max, ewmcorrelation, ewmcovar, ewmcovariance
 from pyg_base import eq, dt, calendar, drange, Dict
 import pandas as pd; import numpy as np
 
@@ -73,18 +74,37 @@ def test_ewmcor():
     a = np.random.normal(0,1,(1000,10)) 
     a = a + np.random.normal(0, 1, (1000, 1))
     res = ewmcorrelation(a, 20)
+    res2 = ewmxcor(a,a,20)
+    assert np.max(abs(res2[-1]-res[-1])) < 0.02
+    res = ewmcorr(a, 20)
     res2 = ewmcor(a,a,20)
-    for i in range(10):
-        for j in range(i):        
-            x = ewmcor(a[:,i], a[:, j], 20)
-            y = res[:, i, j]
-            assert ts_max(abs(x - y)[20:])<0.1
+    assert np.max(abs(res2[-1]-res[-1])) < 0.1
+    assert np.max(abs(res[-1])) <= 1.00001
+    assert np.max(abs(res2[-1])) <= 1.00001
+
+    for overlapping in range(1,5):
+        res = ewmcorr(a, 20, overlapping = overlapping)
+        res2 = ewmcor(a,a,20, overlapping = overlapping)
+        assert np.max(abs(res2[-1]-res[-1])) < 0.1 * overlapping
+        assert np.max(abs(res[-1])) <= 1.00001
+        assert np.max(abs(res2[-1])) <= 1.00001
+        res = ewmcorrelation(a, 20, overlapping = overlapping)
+        res2 = ewmxcor(a,a,20, overlapping = overlapping)
+        assert np.max(abs(res2[-1]-res[-1])) < 0.1 * overlapping
+        assert np.max(abs(res[-1])) <= 1.00001
+        assert np.max(abs(res2[-1])) <= 1.00001
+        
+    ### now type
+        
     a_ = pd.DataFrame(a, columns = list('abcdefghij'), index = drange(-999))
     b = a[:,0]
     res3 = ewmcor(a_, b, 20)
     res3 = ewmcor(a_['b'], b, 20)
 
-    
+
+
+
+
 def test_ewm_empty():
     for a in (np.array([]), pd.Series([],[], dtype = float), pd.DataFrame([],[])):
         for f in [ewma, ewmstd, ewmrms, ewmskew]:
