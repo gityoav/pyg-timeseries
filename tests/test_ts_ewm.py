@@ -106,10 +106,18 @@ def test_ewmcor():
     assert is_series(res)
     res = ewmxcor(b = a[:,1], a = pd.Series(a[:,0], drange(999)), n = 20)
     assert is_series(res)
+
+
+def test_ewmxcor_agrees_with_ewm_correlation():
+    a = np.random.normal(0,1,(2000,2))
+    for overlapping in range(1,5):
+        for n in range(5,30,5):
+            for bias in (True, False):
+                x = ewmxcor(a,a,n, bias = bias, overlapping = overlapping)[:,0,1]
+                y = ewmcorrelation(a, n, bias = bias, overlapping = overlapping)[:,0,1]
+                assert np.max(abs(x-y)[100:]) < 1e-6
+        
     
-
-
-
 def test_ewm_empty():
     for a in (np.array([]), pd.Series([],[], dtype = float), pd.DataFrame([],[])):
         for f in [ewma, ewmstd, ewmrms, ewmskew]:

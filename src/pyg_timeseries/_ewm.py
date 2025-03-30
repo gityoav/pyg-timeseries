@@ -3,6 +3,7 @@ from pyg_timeseries._math import stdev_calculation_ewm, skew_calculation, cor_ca
 from pyg_timeseries._decorators import compiled, first_, _data_state
 from pyg_timeseries._expanding import cumsum
 from pyg_base import pd2np, clock, loop_all, loop, is_pd, is_df, presync, df_concat, is_ts
+import numba
 
 
 
@@ -123,8 +124,7 @@ def _prev(prev, shape):
         return prev
 
 
-
-@compiled
+@numba.jit
 def _ewmxcor(a, b, n, wgt, a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, 
              w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1):
     """
@@ -171,15 +171,16 @@ def _ewmxcor(a, b, n, wgt, a1 = None, a2 = None, b1 = None, b2 = None, ab = None
                             if n0[j,k] > min_sample:
                                 res[i, j, k] = cor_calculation_ewm(t0 = w1[j,k], a1 = a1[j,k], a2 = a2[j,k], 
                                                                    w2 = w2[j,k], b1 = b1[j,k], b2 = b2[j,k], ab = ab[j,k], bias = bias) 
-                        if overlapping > 1:
-                            prev_a[j,k,1:] = prev_a[j,k,:-1]
-                            prev_b[j,k,1:] = prev_b[j,k,:-1]
+                        for o in range(overlapping-1, 0, -1):
+                            prev_a[j,k,o] = prev_a[j,k,o-1]
+                            prev_b[j,k,o] = prev_b[j,k,o-1]
                         prev_a[j,k,0] = a[i,j]
                         prev_b[j,k,0] = b[i,k]
+
                             
     return res,  a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0
 
-@compiled
+@numba.jit
 def _ewmcorrelation(a, n, wgt, a0 = None, a1 = None, a2 = None, aa = None, prev = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1):
     """
     synchronized correlation calculation
@@ -239,12 +240,13 @@ def _ewmcorrelation(a, n, wgt, a0 = None, a1 = None, a2 = None, aa = None, prev 
                                                                                   b1 = a1[k,j], 
                                                                                   b2 = a2[k,j], 
                                                                                   ab = aa[j,k], bias = bias) 
-                        if overlapping > 1:
-                            prev[j,k,1:] = prev[j,k,:-1]
-                            prev[k,j,1:] = prev[k,j,:-1]
+
+                        for o in range(overlapping-1, 0, -1):
+                            prev[j,k,o] = prev[j,k,o-1]
+                            prev[k,j,o] = prev[k,j,o-1]
                         prev[j,k,0] = a[i,j]
                         prev[k,j,0] = a[i,k]
-                            
+
     return res, a0, a1, a2, aa, prev, w2, n0
 
 
@@ -846,7 +848,6 @@ def _ewmxcort(a, b, n, wgt = None, a1 = None, a2 = None, b1 = None, b2 = None,
 
     prev_a = _prev(prev_a, (a.shape[1], b.shape[1], overlapping))
     prev_b = _prev(prev_b, (a.shape[1], b.shape[1], overlapping))
-        
     res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0 = _ewmxcor(a = a, b = b, n = n, wgt = wgt, 
                    a1 = a1, a2 = a2, b1 = b1, b2 = b2, w1 = w1, w2 = w2, n0 = n0, prev_a = prev_a, prev_b = prev_b,
                    ab = ab, min_sample=min_sample, bias = bias, overlapping = overlapping)
@@ -1365,7 +1366,10 @@ def ewmxcor_(a, b, n, min_sample = 0.25, bias = True, data = None, instate = Non
         wgt = np.full(a.shape[0], 1)
     a_ = a.values if is_pd(a) else a
     b_ = b.values if is_pd(b) else b
-    res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0 = _ewmxcort(a = a_, b = b_, n = n, wgt = wgt, min_sample=min_sample, bias = bias, overlapping = overlapping, **state)
+    res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0 = _ewmxcort(a = a_, b = b_, n = n, wgt = wgt, 
+                                                                    min_sample=min_sample, 
+                                                                    bias = bias, 
+                                                                    overlapping = overlapping, **state)
     state = dict(a1=a1, a2=a2, b1 = b1, b2 = b2, ab=ab, prev_a = prev_a, prev_b = prev_b, w1 = w1, w2 = w2, n0 = n0)
     if len(res.shape) == 2:
         if is_pd(a) and res.shape == a.shape:
@@ -1389,7 +1393,8 @@ def ewmcor_(a, b, n, min_sample = 0.25, bias = True, data = None, instate = None
     state = dict(prev_a = 0., prev_b = 0.) if instate is None else instate
     a = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
     b = df_concat(b, join = join, method = method) if isinstance(b, (list,dict)) else b
-    return ewmxcor_(a = cumsum(a), b = cumsum(b), n = n, min_sample = min_sample, bias = bias, data = data, instate = state, wgt = wgt, overlapping = overlapping)
+    return ewmxcor_(a = cumsum(a), b = cumsum(b), n = n, min_sample = min_sample, 
+                    bias = bias, data = data, instate = state, wgt = wgt, overlapping = overlapping)
 
 ewmcor_.output = ['data', 'state']
 
@@ -1432,7 +1437,8 @@ def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, 
     :Example: nan handling
     ----------------------    
     """
-    return ewmxcor_(a = a, b = b, n = n, min_sample = min_sample, bias = bias, data = data, instate = state, wgt = wgt, overlapping = 1).get('data')
+    return ewmxcor_(a = a, b = b, n = n, min_sample = min_sample, bias = bias, data = data, 
+                    instate = state, wgt = wgt, overlapping = overlapping).get('data')
 
 
 def ewmcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, wgt = None, overlapping = 1):
