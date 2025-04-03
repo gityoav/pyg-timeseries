@@ -1,5 +1,5 @@
-from pyg_timeseries import ewma, ewmstd, ewmrms, ewmskew, ewmLR
-from pyg_timeseries import ewmcor, ewmxcor, ewmcorr, ts_max, ewmcorrelation, ewmcovar, ewmcovariance
+from pyg_timeseries import ewma, ewmstd, ewmrms, ewmskew, ewmxLR, cumsum
+from pyg_timeseries import ewmxcor, ewmcorr, ts_max, ewmcorrelation, ewmcovar, ewmcovariance
 from pyg_base import eq, dt, calendar, drange, Dict, is_pd, is_df, is_series
 import pandas as pd; import numpy as np
 
@@ -50,23 +50,19 @@ def test_ewm_yearly():
         assert eq(f(a, 3).reindex(days), f(a.reindex(days), 3))
         assert eq(f(a.reindex(days).ffill(), 3, time = 'y'), f(a.reindex(days),3).ffill())
 
-def test_ewm_LR():
+def test_ewmxLR():
     a0 = pd.Series(np.random.normal(0,1,10000), drange(-9999))
     a1 = pd.Series(np.random.normal(0,1,10000), drange(-9999))
     b = (a0 - a1) + pd.Series(np.random.normal(0,1,10000), drange(-9999))
     a = pd.concat([a0,a1], axis=1)
-    LR = ewmLR(a,b,50)
+    LR = ewmxLR(a,b,50, is_returns = True)
     assert abs(LR.m.mean()[0]-1)<0.5
     assert abs(LR.m.mean()[1]+1)<0.5
-    a = Dict(a0 = a0, a1 = a1)
-    LR2 = ewmLR(a,b,50)
-    assert eq(LR2.a0.m, LR.m[0])
-    assert eq(LR2.a0.c, LR.c[0])
-    assert 'state' not in LR2.a0
-    a = [a0,a1]
-    LR3 = ewmLR(a,b,50)
-    assert eq(LR2.a0, LR3[0])
-    assert eq(LR2.a1, LR3[1])
+    a = (a0 - a1) + pd.Series(np.random.normal(0,1,10000), drange(-9999))
+    b = pd.concat([a0,a1], axis=1)
+    LR2 = ewmxLR(a,b,n=50, is_returns = True)
+
+
 
 def test_ewmcor():
     """ the two functions are not identical but should be pretty close """
@@ -77,18 +73,12 @@ def test_ewmcor():
     res2 = ewmxcor(a,a,20)
     assert np.max(abs(res2[-1]-res[-1])) < 0.02
     res = ewmcorr(a, 20)
-    res2 = ewmcor(a,a,20)
-    assert np.max(abs(res2[-1]-res[-1])) < 0.1
     assert np.max(abs(res[-1])) <= 1.00001
-    assert np.max(abs(res2[-1])) <= 1.00001
 
     for overlapping in range(1,5):
         for bias in [True, False]:
             res = ewmcorr(a, 20, overlapping = overlapping, bias = bias)
-            res2 = ewmcor(a,a,20, overlapping = overlapping, bias = bias)
-            assert np.max(abs(res2[-1]-res[-1])) < 0.2 * overlapping
             assert np.max(abs(res[-1])) <= 1.00001
-            assert np.max(abs(res2[-1])) <= 1.00001
             res = ewmcorrelation(a, 20, overlapping = overlapping,bias = bias)
             res2 = ewmxcor(a,a,20, overlapping = overlapping, bias = bias)
             assert np.max(abs(res2[-1]-res[-1])) < 0.2 * overlapping
@@ -106,6 +96,7 @@ def test_ewmcor():
     assert is_series(res)
     res = ewmxcor(b = a[:,1], a = pd.Series(a[:,0], drange(999)), n = 20)
     assert is_series(res)
+
 
 
 def test_ewmxcor_agrees_with_ewm_correlation():

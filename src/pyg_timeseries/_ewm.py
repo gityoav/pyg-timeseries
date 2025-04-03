@@ -2,13 +2,9 @@ import numpy as np; import pandas as pd
 from pyg_timeseries._math import stdev_calculation_ewm, skew_calculation, cor_calculation_ewm, covariance_calculation, LR_calculation_ewm, variance_calculation_ewm, _w
 from pyg_timeseries._decorators import compiled, first_, _data_state
 from pyg_timeseries._expanding import cumsum
-from pyg_base import pd2np, clock, loop_all, loop, is_pd, is_df, presync, df_concat, is_ts
+from pyg_base import dictattr, pd2np, clock, loop_all, loop, is_pd, is_df, presync, df_concat, is_ts
 import numba
 
-
-
-__all__ = ['ewma', 'ewmstd', 'ewmvar', 'ewmskew', 'ewmrms',  'ewmcor',  'ewmcorr', 'ewmLR', 'ewmGLM',
-           'ewma_', 'ewmstd_', 'ewmskew_', 'ewmrms_', 'ewmcor_', 'ewmvar_','ewmLR_', 'ewmGLM_',]
 
 
 ############################################
@@ -123,27 +119,36 @@ def _prev(prev, shape):
     else:
         return prev
 
-
-@numba.jit
-def _ewmxcor(a, b, n, wgt, a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, 
-             w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1):
+@numba.jit  
+def _ewmx(a, b, n, wgt, time, t = None,
+          a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, 
+             w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, calculation = cor_calculation_ewm):
     """
     cross-sectional correlation of a and b
     
     a, b are assumed to be SUM of returns
-
+    
+    >>> a = cumsum(np.random.normal(0,1,(1000,10)))
+    >>> b = a; n = 20
+    >>> wgt = np.full(a.shape[0], 1)
+    >>> time = np.array(sorted(list(range(200))*5))
+    >>> t = a1 = a2 = b1 = b2 = ab = prev_a = prev_b = w1 = w2 = n0 = None
+    >>> min_sample = 0.25; bias = False; overlapping = 1; calculation = cor_calculation_ewm
+    >>> res = _ewmx(a, b, n, wgt, time = time, t = None, a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, calculation = cor_calculation_ewm)[0][0]
+    
     """
     
     x = a.shape[1]
     y = b.shape[1]
-    
+    res0 = np.full((a.shape[0], x, y), np.nan)    
     if n == 1:
-        return np.full((a.shape[0], x, y), np.nan), a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0
+       return (res0,), a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t
     p = w = _w(n)
     v = (1 - w) * wgt
-    res = np.full((a.shape[0], x, y), np.nan)
+    vi = px = py = dx = dy = np.nan
     prev_a = np.full((x,y,overlapping), np.nan) if prev_a is None else prev_a
     prev_b = np.full((x,y,overlapping), np.nan) if prev_b is None else prev_b
+    t = np.full((x,y), np.nan) if t is None else t
     a1 = np.zeros((x,y)) if a1 is None else a1
     a2 = np.zeros((x,y)) if a2 is None else a2
     b1 = np.zeros((x,y)) if b1 is None else b1
@@ -152,33 +157,143 @@ def _ewmxcor(a, b, n, wgt, a1 = None, a2 = None, b1 = None, b2 = None, ab = None
     w1 = np.zeros((x,y)) if w1 is None else w1
     w2 = np.zeros((x,y)) if w2 is None else w2
     n0 = np.zeros((x,y)) if n0 is None else n0
-    for i in range(a.shape[0]):
-        for j in range(x):
-            if ~np.isnan(a[i,j]):
-                for k in range(y):
-                    if ~np.isnan(b[i,k]):
-                        if ~np.isnan(prev_a[j,k,-1]) and ~np.isnan(prev_b[j,k,-1]):
-                            dx = a[i,j] - prev_a[j,k,-1]
-                            dy = b[i,k] - prev_b[j,k,-1]
-                            w1[j,k] = w1[j,k] * p + v[i]
-                            w2[j,k] = w2[j,k] * p**2 + v[i]**2        
+    for j in range(x):
+        for k in range(y):
+            for i in range(a.shape[0]):
+                if ~np.isnan(a[i,j]) and ~np.isnan(b[i,k]):
+                    if ~np.isnan(prev_a[j,k,-1]) and ~np.isnan(prev_b[j,k,-1]):
+                        if ~np.isnan(vi) and ~np.isnan(time[i]) and time[i] == t[j,k]:                            
+                            w1[j,k] -= vi
+                            w2[j,k] -= vi **2        
+                            a1[j,k] -= vi * dx
+                            b1[j,k] -= vi * dy
+                            a2[j,k] -= vi * dx ** 2        
+                            b2[j,k] -= vi * dy ** 2                                
+                            ab[j,k] -= vi * dx * dy
+                            dx = a[i,j] - px
+                            dy = b[i,k] - py
+                            vi = v[i]                            
+                            w1[j,k] += vi
+                            w2[j,k] += vi **2        
+                            a1[j,k] += vi * dx
+                            b1[j,k] += vi * dy
+                            a2[j,k] += vi * dx ** 2        
+                            b2[j,k] += vi * dy ** 2                                
+                            ab[j,k] += vi * dx * dy
+                        else:
+                            vi = v[i]
+                            px = prev_a[j,k,-1]
+                            py = prev_b[j,k,-1]
+                            dx = a[i,j] - px
+                            dy = b[i,k] - py
+                            p = w if np.isnan(time[i]-t[j,k]) else w**(time[i]-t[j,k])
+                            w1[j,k] = w1[j,k] * p + vi
+                            w2[j,k] = w2[j,k] * p**2 + vi**2        
                             n0[j,k] = n0[j,k] * p + (1-w)
-                            a1[j,k] = a1[j,k] * p + v[i] * dx
-                            b1[j,k] = b1[j,k] * p + v[i] * dy
-                            a2[j,k] = a2[j,k] * p + v[i] * dx ** 2        
-                            b2[j,k] = b2[j,k] * p + v[i] * dy ** 2                                
-                            ab[j,k] = ab[j,k] * p + v[i] * dx * dy
-                            if n0[j,k] > min_sample:
-                                res[i, j, k] = cor_calculation_ewm(t0 = w1[j,k], a1 = a1[j,k], a2 = a2[j,k], 
-                                                                   w2 = w2[j,k], b1 = b1[j,k], b2 = b2[j,k], ab = ab[j,k], bias = bias) 
-                        for o in range(overlapping-1, 0, -1):
-                            prev_a[j,k,o] = prev_a[j,k,o-1]
-                            prev_b[j,k,o] = prev_b[j,k,o-1]
-                        prev_a[j,k,0] = a[i,j]
-                        prev_b[j,k,0] = b[i,k]
+                            a1[j,k] = a1[j,k] * p + vi * dx
+                            b1[j,k] = b1[j,k] * p + vi * dy
+                            a2[j,k] = a2[j,k] * p + vi * dx ** 2        
+                            b2[j,k] = b2[j,k] * p + vi * dy ** 2                                
+                            ab[j,k] = ab[j,k] * p + vi * dx * dy
+                            t[j,k] = time[i]
+                    if n0[j,k] > min_sample:
+                        res0[i, j, k] = calculation(t0 = w1[j,k], a1 = a1[j,k], a2 = a2[j,k], 
+                                                           w2 = w2[j,k], b1 = b1[j,k], b2 = b2[j,k], ab = ab[j,k], bias = bias) 
+                    for o in range(overlapping-1, 0, -1):
+                        prev_a[j,k,o] = prev_a[j,k,o-1]
+                        prev_b[j,k,o] = prev_b[j,k,o-1]
+                    prev_a[j,k,0] = a[i,j]
+                    prev_b[j,k,0] = b[i,k]                 
+    return (res0,), a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t
 
-                            
-    return res,  a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0
+
+@numba.jit  
+def _ewmx2(a, b, n, wgt, time, t = None,
+          a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, 
+             w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, calculation = LR_calculation_ewm):
+    """
+    cross-sectional correlation of a and b
+    
+    a, b are assumed to be SUM of returns
+    
+    >>> a = cumsum(np.random.normal(0,1,(1000,10)))
+    >>> b = a; n = 20
+    >>> wgt = np.full(a.shape[0], 1)
+    >>> time = np.array(sorted(list(range(200))*5))
+    >>> t = a1 = a2 = b1 = b2 = ab = prev_a = prev_b = w1 = w2 = n0 = None
+    >>> min_sample = 0.25; bias = False; overlapping = 1; calculation = LR_calculation_ewm
+    >>> res = _ewmx2(a, b, n, wgt, time = time, t = None, a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, calculation = LR_calculation_ewm)[0]
+    
+    """
+    
+    x = a.shape[1]
+    y = b.shape[1]
+    res0 = np.full((a.shape[0], x, y), np.nan)    
+    res1 = np.full((a.shape[0], x, y), np.nan)    
+    if n == 1:
+       return (res0,res1), a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t
+    p = w = _w(n)
+    v = (1 - w) * wgt
+    vi = px = py = dx = dy = np.nan
+    prev_a = np.full((x,y,overlapping), np.nan) if prev_a is None else prev_a
+    prev_b = np.full((x,y,overlapping), np.nan) if prev_b is None else prev_b
+    t = np.full((x,y), np.nan) if t is None else t
+    a1 = np.zeros((x,y)) if a1 is None else a1
+    a2 = np.zeros((x,y)) if a2 is None else a2
+    b1 = np.zeros((x,y)) if b1 is None else b1
+    b2 = np.zeros((x,y)) if b2 is None else b2
+    ab = np.zeros((x,y)) if ab is None else ab
+    w1 = np.zeros((x,y)) if w1 is None else w1
+    w2 = np.zeros((x,y)) if w2 is None else w2
+    n0 = np.zeros((x,y)) if n0 is None else n0
+    for j in range(x):
+        for k in range(y):
+            for i in range(a.shape[0]):
+                if ~np.isnan(a[i,j]) and ~np.isnan(b[i,k]):
+                    if ~np.isnan(prev_a[j,k,-1]) and ~np.isnan(prev_b[j,k,-1]):
+                        if ~np.isnan(vi) and ~np.isnan(time[i]) and time[i] == t[j,k]:                            
+                            w1[j,k] -= vi
+                            w2[j,k] -= vi **2        
+                            a1[j,k] -= vi * dx
+                            b1[j,k] -= vi * dy
+                            a2[j,k] -= vi * dx ** 2        
+                            b2[j,k] -= vi * dy ** 2                                
+                            ab[j,k] -= vi * dx * dy
+                            dx = a[i,j] - px
+                            dy = b[i,k] - py
+                            vi = v[i]                            
+                            w1[j,k] += vi
+                            w2[j,k] += vi **2        
+                            a1[j,k] += vi * dx
+                            b1[j,k] += vi * dy
+                            a2[j,k] += vi * dx ** 2        
+                            b2[j,k] += vi * dy ** 2                                
+                            ab[j,k] += vi * dx * dy
+                        else:
+                            vi = v[i]
+                            px = prev_a[j,k,-1]
+                            py = prev_b[j,k,-1]
+                            dx = a[i,j] - px
+                            dy = b[i,k] - py
+                            p = w if np.isnan(time[i]-t[j,k]) else w**(time[i]-t[j,k])
+                            w1[j,k] = w1[j,k] * p + vi
+                            w2[j,k] = w2[j,k] * p**2 + vi**2        
+                            n0[j,k] = n0[j,k] * p + (1-w)
+                            a1[j,k] = a1[j,k] * p + vi * dx
+                            b1[j,k] = b1[j,k] * p + vi * dy
+                            a2[j,k] = a2[j,k] * p + vi * dx ** 2        
+                            b2[j,k] = b2[j,k] * p + vi * dy ** 2                                
+                            ab[j,k] = ab[j,k] * p + vi * dx * dy
+                            t[j,k] = time[i]
+                    if n0[j,k] > min_sample:
+                        res0[i, j, k], res1[i, j, k] = calculation(t0 = w1[j,k], a1 = a1[j,k], a2 = a2[j,k], 
+                                                           w2 = w2[j,k], b1 = b1[j,k], b2 = b2[j,k], ab = ab[j,k], bias = bias) 
+                    for o in range(overlapping-1, 0, -1):
+                        prev_a[j,k,o] = prev_a[j,k,o-1]
+                        prev_b[j,k,o] = prev_b[j,k,o-1]
+                    prev_a[j,k,0] = a[i,j]
+                    prev_b[j,k,0] = b[i,k]                 
+    return (res0,res1), a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t
 
 @numba.jit
 def _ewmcorrelation(a, n, wgt, a0 = None, a1 = None, a2 = None, aa = None, prev = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1):
@@ -316,14 +431,14 @@ def ewmcovariance_(a, n, min_sample = 0.25, bias = False, overlapping = 1, insta
     state['prev'] = _prev(state.get('prev'), (arr.shape[1],arr.shape[1],overlapping))
     if isinstance(arr, np.ndarray):
         res, a0, a1, aa, prev, n0 = _ewmcovariance(arr, n, wgt = wgt, min_sample = min_sample, bias = bias, overlapping = overlapping, **state)
-        state = dict(a0=a0, a1=a1, aa=aa, prev = prev, n0 = n0)
-        return dict(data = res, columns = None, index = None, state = state)
+        state = dictattr(a0=a0, a1=a1, aa=aa, prev = prev, n0 = n0)
+        return dictattr(data = res, columns = None, index = None, state = state)
     elif is_df(arr):
         index = arr.index
         columns = list(arr.columns)
         res, a0, a1, aa, prev, n0 = _ewmcovariance(arr.values, n, wgt = wgt, min_sample = min_sample, overlapping = overlapping, bias = bias, **state)
-        state = dict(a0=a0, a1=a1, aa=aa, prev = prev, n0 = n0)
-        return dict(data = res, columns = columns, index = index, state = state)
+        state = dictattr(a0=a0, a1=a1, aa=aa, prev = prev, n0 = n0)
+        return dictattr(data = res, columns = columns, index = index, state = state)
     else:
         raise ValueError('unsure how to calculate correlation matrix for a %s'%a)
 
@@ -562,14 +677,14 @@ def ewmcorrelation_(a, n, min_sample = 0.25, bias = False, overlapping = 1, inst
     state['prev'] = _prev(state.get('prev'), (arr.shape[1],arr.shape[1],overlapping))
     if isinstance(arr, np.ndarray):
         res, a0, a1, a2, aa, prev, w2, n0 = _ewmcorrelation(arr, wgt = wgt, n = n, min_sample = min_sample, bias = bias, overlapping = overlapping, **state)
-        state = dict(a0=a0, a1=a1, a2=a2, aa=aa, prev = prev, w2 = w2, n0 = n0)
-        return dict(data = res, index = None, columns = None, state = state)
+        state = dictattr(a0=a0, a1=a1, a2=a2, aa=aa, prev = prev, w2 = w2, n0 = n0)
+        return dictattr(data = res, index = None, columns = None, state = state)
     elif is_df(arr):
         index = arr.index
         columns = list(arr.columns)
         res, a0, a1, a2, aa, prev, w2, n0 = _ewmcorrelation(arr.values, wgt = wgt, n = n, min_sample = min_sample, bias = bias, overlapping = overlapping, **state)
-        state = dict(a0=a0, a1=a1, a2=a2, aa=aa, prev=prev, w2 = w2, n0 = n0)
-        return dict(data = res, columns = columns, index = index, state = state)
+        state = dictattr(a0=a0, a1=a1, a2=a2, aa=aa, prev=prev, w2 = w2, n0 = n0)
+        return dictattr(data = res, columns = columns, index = index, state = state)
     else:
         raise ValueError('unsure how to calculate correlation matrix for a %s'%a)
 
@@ -631,65 +746,6 @@ def ewmcorrelation(a, n, min_sample = 0.25, bias = False, overlapping = 1, insta
     """
     return ewmcorrelation_(a, n, min_sample = min_sample, bias = bias, overlapping = overlapping, instate = instate , join = join, method = method, wgt = wgt).get('data')
 
-
-@pd2np
-@compiled
-def _ewmLR(a, b, ba, n, time, wgt, t = np.nan, t0 = 0, a1 = 0, a2 = 0, b1 = 0, b2 = 0, ab = 0, w2 = 0, min_sample = 0.25, bias = False):
-    """
-    We have a and b for which we want to fit:
-        b_i = c + m a_i 
-    
-    minimize LSE under weights w_i. We let:
-        w = \sum_i w_i
-    
-    LSE(c,m) = \sum w_i (c + m a_i - b_i)^2
-    dLSE/dc  = 0  <==> \sum w_i  (c + m a_i - b_i) = 0    [1]
-    dLSE/dm  = 0 <==> \sum w_i  a_i (c + m a_i - b_i) = 0 [2]
-
-    c     + mE(a)    = E(b)     [1]
-    cE(a) + mE(a^2)  = E(ab)    [2]
-    
-    cE(a) + mE(a)^2  = E(a)E(n) [1] * E(a) 
-    m(E(a^2) - E(a)^2) = E(ab) - E(a)E(b)
-    
-    m = covar(a,b)/var(a)
-    c = E(b) - mE(a)
-    
-
-    :Example:
-    -----------
-    a = np.random.normal(0,1,10000)
-    b = 0.5 * a + np.random.normal(0,1,10000)
-    _ewmLRt(a,b,100)
-    """
-    w = _w(n)
-    v = (1-w)*wgt
-    m = np.full_like(a, np.nan)
-    c = np.full_like(a, np.nan)
-    i0 = 0; n0 = 0
-    for i in range(a.shape[0]):
-        if ~np.isnan(a[i]) and ~np.isnan(b[i]):
-            if time[i] == t:
-                a1 = a1 + v[i] * a[i] - v[i0] * a[i0]
-                a2 = a2 + v[i] * a[i]**2 - v[i0] * a[i0]**2
-                b1 = b1 + v[i] * b[i] - v[i0] * b[i0]
-                b2 = b2 + v[i] * b[i]**2 - v[i0] * b[i0]**2
-                ab = ab + v[i] * ba[i] - v[i0] * ba[i0]
-            else:
-                p = w if np.isnan(time[i]) else w**(time[i]-t)
-                n0 = n0 * p + (1-w)
-                t0 = t0 * p + v[i]
-                w2 = w2 * p**2 + v[i]**2
-                a1 = a1 * p + v[i] * a[i]
-                a2 = a2 * p + v[i] * a[i]**2
-                b1 = b1 * p + v[i] * b[i]
-                b2 = b2 * p + v[i] * b[i]**2
-                ab = ab * p + v[i] * ba[i]
-                t = time[i]
-            i0 = i
-            if n0 >= min_sample:
-                c[i0], m[i0] = LR_calculation_ewm(t0 = t0, a1 = a1, a2 = a2, b1 = b1, b2 = b2, ab = ab, w2 = w2, bias = bias)
-    return c, m, t, t0, a1, a2, b1, b2, ab, w2
 
 
 @compiled
@@ -831,16 +887,43 @@ def _ewmstdt(a, n, wgt = None, time = None, t = None, t0 = 0, t1 = 0, t2 = 0, w2
 
 
 
+dims = {cor_calculation_ewm : 1, LR_calculation_ewm: 2}
+def _dim(calculation, dim = None):
+    return dim or dims[calculation]
+
+
+_ewmxs = {1 : _ewmx, 2 : _ewmx2}
+
+def _reshape(res, reshape_a, reshape_b):
+    if isinstance(res, tuple):
+        return tuple([_reshape(r, reshape_a, reshape_b) for r in res])
+    if reshape_a and reshape_b:
+        res = res[:,0,0]
+    elif reshape_a:
+        res = res[:,0,:]
+    elif reshape_b:
+        res = res[:,:,0]
+    return res
+
 @pd2np
-def _ewmxcort(a, b, n, wgt = None, a1 = None, a2 = None, b1 = None, b2 = None, 
+def _ewmxt(a, b, n, wgt = None, time = None, t = None, a1 = None, a2 = None, b1 = None, b2 = None, 
               ab = None, w1 = None, w2 = None, n0 = None, prev_a = None, prev_b = None, 
-              min_sample = 0.25, bias = False, overlapping = 1):
+              min_sample = 0.25, bias = False, overlapping = 1, 
+              calculation = cor_calculation_ewm, dim = None):
     """
     a1 = None; a2 = None; b1 = None; b2 = None; ab = None; w1 = None; w2 = None; n0 = None; min_sample = 0.25; bias = False
+    wgt = time = t = dim = None
+    res = _ewmxt(a,b,n, wgt = wgt, time = time, calculation = LR_calculation_ewm)
+    res[0][0].shape
+    res[0][1].shape
+    res = _ewmxt(a,b,n, wgt = wgt, time = time, calculation = cor_calculation_ewm)
+    res[0].shape
     """
     wgt = _wgt(a, wgt)
     reshape_a = len(a.shape) == 1
     reshape_b = len(b.shape) == 1
+    time = clock(b, time, t)
+    wgt = _wgt(a, wgt)
     if reshape_a:
         a = np.reshape(a, (a.shape[0],1))
     if reshape_b:
@@ -848,29 +931,17 @@ def _ewmxcort(a, b, n, wgt = None, a1 = None, a2 = None, b1 = None, b2 = None,
 
     prev_a = _prev(prev_a, (a.shape[1], b.shape[1], overlapping))
     prev_b = _prev(prev_b, (a.shape[1], b.shape[1], overlapping))
-    res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0 = _ewmxcor(a = a, b = b, n = n, wgt = wgt, 
-                   a1 = a1, a2 = a2, b1 = b1, b2 = b2, w1 = w1, w2 = w2, n0 = n0, prev_a = prev_a, prev_b = prev_b,
-                   ab = ab, min_sample=min_sample, bias = bias, overlapping = overlapping)
-
-    reshape_a = res.shape[1] == 1
-    reshape_b = res.shape[2] == 1
-    if reshape_a and reshape_b:
-        res = res[:,0,0]
-    elif reshape_a:
-        res = res[:,0,:]
-    elif reshape_b:
-        res = res[:,:,0]
-    return res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0         
+    dim = _dim(calculation = calculation, dim = dim)
+    f = _ewmxs[dim]
+    res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t = f(a = a, b = b, n = n, wgt = wgt, time = time,
+                       a1 = a1, a2 = a2, b1 = b1, b2 = b2, w1 = w1, w2 = w2, n0 = n0, prev_a = prev_a, prev_b = prev_b,
+                       ab = ab, min_sample=min_sample, bias = bias, overlapping = overlapping, calculation=calculation)
+    if dim == 1:
+        res = res[0]
+    res = _reshape(res, reshape_a = reshape_a, reshape_b = reshape_b)
+    return res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t        
 
 
-@loop_all
-@presync
-def _ewmLRt(a, b, n, wgt = None, time = None, t = None, t0 = 0, a1 = 0, a2 = 0, b1 = 0, b2 = 0, ab = 0, w2 = 0, min_sample = 0.25, bias = False):
-    ba = b * a
-    time = clock(b, time, t)
-    wgt = _wgt(a, wgt)
-    t = 0 if t is None or np.isnan(t) else t
-    return _ewmLR(a = a, b = b, ba = ba, n = n, wgt = wgt, time = time, t = t, t0 = t0, a1 = a1, a2 = a2, b1 = b1, b2 = b2, ab = ab, w2 = w2, min_sample=min_sample, bias = bias)
 
 @loop(list, dict)
 @presync(columns = False)
@@ -1354,51 +1425,65 @@ def ewmvar(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = F
 ewmstd_.output = ['data', 'state']
 
 
-def ewmxcor_(a, b, n, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, overlapping = 1, join = 'outer', method = None):
-    """
-    Equivalent to ewmxcor but returns a state parameter for instantiation of later calculations.
-    See ewmxcor documentation for more details
-    """
-    state = {} if instate is None else instate
-    a = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
-    b = df_concat(b, join = join, method = method) if isinstance(b, (list,dict)) else b
-    if wgt is None:
-        wgt = np.full(a.shape[0], 1)
-    a_ = a.values if is_pd(a) else a
-    b_ = b.values if is_pd(b) else b
-    res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0 = _ewmxcort(a = a_, b = b_, n = n, wgt = wgt, 
-                                                                    min_sample=min_sample, 
-                                                                    bias = bias, 
-                                                                    overlapping = overlapping, **state)
-    state = dict(a1=a1, a2=a2, b1 = b1, b2 = b2, ab=ab, prev_a = prev_a, prev_b = prev_b, w1 = w1, w2 = w2, n0 = n0)
+def _to_pandas(res, a, b):
+    if isinstance(res, tuple):
+        return tuple([_to_pandas(r, a, b) for r in res])
     if len(res.shape) == 2:
         if is_pd(a) and res.shape == a.shape:
             res = pd.DataFrame(res, index = a.index, columns = a.columns)                
         elif is_pd(b) and res.shape == b.shape:
-            res = pd.DataFrame(res, index = a.index, columns = a.columns)                
+            res = pd.DataFrame(res, index = b.index, columns = b.columns)                
     elif len(res.shape) == 1:
         if is_pd(a):
             res = pd.Series(res, index = a.index)                
         elif is_pd(b):
-            res = pd.Series(res, index = b.index)                
-    return dict(data = res, state = state)
+            res = pd.Series(res, index = b.index)
+    return res
+
+def ewmx_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, 
+             overlapping = 1, join = 'outer', method = None, calculation = cor_calculation_ewm, is_returns = False, dim = None):
+    """
+    Equivalent to ewmxcor but returns a state parameter for instantiation of later calculations.
+    See ewmxcor documentation for more details
+    
+    res = ewmx_(a,b,20)
+    res['data']
+    res['state']    
+    """
+    state = {} if instate is None else instate
+    a = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
+    b = df_concat(b, join = join, method = method) if isinstance(b, (list,dict)) else b
+    if is_returns:
+        a = cumsum(a)
+        b = cumsum(b)
+    if wgt is None:
+        wgt = np.full(a.shape[0], 1)
+    a_ = a.values if is_pd(a) else a
+    b_ = b.values if is_pd(b) else b
+    res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t = _ewmxt(a = a_, b = b_, n = n, 
+                                                                 wgt = wgt, time = time,
+                                                                 min_sample=min_sample, 
+                                                                 bias = bias, 
+                                                                 overlapping = overlapping, 
+                                                                 calculation = calculation,
+                                                                 dim = dim,
+                                                                 **state)
+
+    state = dictattr(a1=a1, a2=a2, b1 = b1, b2 = b2, ab=ab, prev_a = prev_a, prev_b = prev_b, w1 = w1, w2 = w2, n0 = n0, t = t)
+    res = _to_pandas(res, a, b)
+    return dictattr(data = res, state = state)
+
+
+def ewmxcor_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, overlapping = 1, 
+             join = 'outer', method = None, is_returns = False):
+    return ewmx_(a, b, n, time = time, min_sample = min_sample, bias = bias, data = data, instate = instate, wgt = wgt, 
+                 overlapping = overlapping, join = join, method = method, calculation = cor_calculation_ewm, is_returns=is_returns)
 
 ewmxcor_.output = ['data', 'state']
 
-def ewmcor_(a, b, n, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, overlapping = 1, join = 'outer', method = None):
-    """
-    Equivalent to ewmcor but returns a state parameter for instantiation of later calculations.
-    See ewmcor documentation for more details
-    """
-    state = dict(prev_a = 0., prev_b = 0.) if instate is None else instate
-    a = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
-    b = df_concat(b, join = join, method = method) if isinstance(b, (list,dict)) else b
-    return ewmxcor_(a = cumsum(a), b = cumsum(b), n = n, min_sample = min_sample, 
-                    bias = bias, data = data, instate = state, wgt = wgt, overlapping = overlapping)
 
-ewmcor_.output = ['data', 'state']
-
-def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, wgt = None, overlapping = 1):
+def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, 
+            wgt = None, overlapping = 1, is_returns = False):
     """
     calculates pair-wise correlation between a and b returns, assuming a and b are TOTAL returns
     
@@ -1438,62 +1523,9 @@ def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, 
     ----------------------    
     """
     return ewmxcor_(a = a, b = b, n = n, min_sample = min_sample, bias = bias, data = data, 
-                    instate = state, wgt = wgt, overlapping = overlapping).get('data')
+                    instate = state, wgt = wgt, overlapping = overlapping, is_returns = is_returns).get('data')
 
 
-def ewmcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, wgt = None, overlapping = 1):
-    """
-    calculates pair-wise correlation between a and b returns.
-    
-    :Parameters:
-    ----------
-    a : 1/2d array/timeseries
-    b : 1/2d array/timeseries
-    n : int/fraction
-        The number or days (or a ratio) to scale the history
-    min_sample : floar, optional
-        minimum weight of observations before we return a reading. The default is 0.25. This ensures that we don't get silly numbers due to small population.
-    bias : bool, optional, 
-        bias in vol estimation. default False. Pandas default is True
-    data : place holder, ignore, optional
-        ignore. The default is None.
-    state : dict, optional
-        Output from a previous run of ewmcor_. The default is None.
-    wgt: weighting for data
-        
-    :Example: matching pandas
-    -------------------------
-    >>> import pandas as pd; import numpy as np; from pyg import *
-    >>> a = pd.Series(np.random.normal(0,1,10000), drange(-9999))
-    >>> b = pd.Series(np.random.normal(0,1,9000), drange(-8999))
-    >>> ts = ewmcor(a, b, n = 10); df = a.ewm(10).corr(b)
-    >>> assert abs(ts-df).max()<1e-10
-
-    :Example: numpy arrays support
-    ------------------------------
-    >>> assert eq(ewmcor(a.values, b.values, 10), ewmcor(a, b, 10).values)
-
-    :Example: nan handling
-    ----------------------
-    >>> a[a.values<-0.1] = np.nan
-    >>> ts = ewmcor(a, b, 10, time = 'i'); df = a.ewm(10).corr(b) # note: pandas assumes, 'time' pass per index entry, even if value is nan
-    >>> assert abs(ts-df).max()<1e-10
-
-    :Example: state management
-    --------------------------
-    >>> a = pd.Series(np.random.normal(0,1,10000), drange(-9999))
-    >>> b = pd.Series(np.random.normal(0,1,10000), drange(-9999))
-    >>> old_a = a.iloc[:5000]; old_b = b.iloc[:5000]
-    >>> new_a = a.iloc[5000:]; new_b = b.iloc[5000:]
-    >>> old_ts = ewmcor_(old_a, old_b, 10)
-    >>> new_ts = ewmcor(new_a, new_b, 10, **old_ts) # instantiation with previous ewma
-    >>> ts = ewmcor(a,b,10)
-    >>> assert eq(new_ts, ts.iloc[5000:])
-    
-    """
-    if not state:
-        state = dict(prev_a = 0., prev_b = 0.)
-    return ewmxcor_(a = cumsum(a), b = cumsum(b), n = n, min_sample = min_sample, bias = bias, data = data, instate = state, wgt = wgt, overlapping = overlapping)['data']
 
 
 def ewmGLM_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None):
@@ -1566,21 +1598,44 @@ def ewmGLM(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, st
 
 
 
-def ewmLR_(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = None, m = None, instate = None, wgt = None):
+def ewmxLR_(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = None, m = None, instate = None, wgt = None, is_returns = False):
     """
-    Equivalent to ewmcor but returns a state parameter for instantiation of later calculations.
-    See ewmcor documentation for more details
-    """
-    state = instate or {}    
-    return _data_state(['c', 'm', 't', 't0', 'a1', 'a2', 'b1', 'b2', 'ab', 'w2'], 
-                       _ewmLRt(a = a, b = b, n = n, time = time, wgt = wgt, min_sample=min_sample, bias = bias, axis=axis, **state),
-                       output = ['c', 'm'])
+    Calculates a Linear regression of a versus b
+    
+    We have a and b for which we want to fit:
+        b_i = c + m a_i 
+    
+    minimize LSE under weights w_i. We let:
+        w = \sum_i w_i
+    
+    LSE(c,m) = \sum w_i (c + m a_i - b_i)^2
+    dLSE/dc  = 0  <==> \sum w_i  (c + m a_i - b_i) = 0    [1]
+    dLSE/dm  = 0 <==> \sum w_i  a_i (c + m a_i - b_i) = 0 [2]
 
-ewmLR_.output = ['c', 'm', 'state']
-
-def ewmLR(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = None, m = None, state = None, wgt = None):
+    c     + mE(a)    = E(b)     [1]
+    cE(a) + mE(a^2)  = E(ab)    [2]
+    
+    cE(a) + mE(a)^2  = E(a)E(n) [1] * E(a) 
+    m(E(a^2) - E(a)^2) = E(ab) - E(a)E(b)
+    
+    m = covar(a,b)/var(a)
+    c = E(b) - mE(a)
+    
     """
-    calculates pair-wise linear regression between a and b.
+    res = ewmx_(a = a, b = b, n = n, time = time, 
+                min_sample = min_sample, bias = bias, instate = instate, 
+                wgt = wgt, calculation = LR_calculation_ewm, is_returns = is_returns)
+    c, m = res['data']    
+    return dictattr(c = c, m = m, state = res['state'])
+
+ewmxLR_.output = ['c', 'm', 'state']
+
+def ewmxLR(a, b, n, time = None, min_sample = 0.25, bias = True, state = None, wgt = None, is_returns = False):
+    """
+    calculates pair-wise linear regression between changes in a and b.
+    
+    a and b are assumed to be total returns!
+    
     We have a and b for which we want to fit:
     
     >>> b_i = c + m a_i 
@@ -1612,10 +1667,6 @@ def ewmLR(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = No
         minimum weight of observations before we return a reading. The default is 0.25. This ensures that we don't get silly numbers due to small population.
     bias : bool, optional
         vol estimation for a and b should really by unbiased. Nevertheless, we track pandas and set bias = True as a default.
-    axis : int, optional
-        axis of calculation. The default is 0.
-    c,m : place holder, ignore, optional
-        ignore. The default is None.
     state : dict, optional
         Output from a previous run of ewmcor_. The default is None.
     
@@ -1654,11 +1705,13 @@ def ewmLR(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = No
     >>> assert abs(LR.m.mean()[0]-1)<0.5
     >>> assert abs(LR.m.mean()[1]+1)<0.5
     """
-    state = state or {}
-    return _data_state(['c', 'm'], _ewmLRt(a = a, b = b, n = n, time = time, min_sample=min_sample, bias = bias, axis=axis, wgt = wgt, **state),
-                       output = ['c', 'm'])
+    res = ewmx_(a = a, b = b, n = n, time = time, 
+                min_sample = min_sample, bias = bias, instate = state, 
+                wgt = wgt, calculation = LR_calculation_ewm, is_returns = is_returns)
+    c, m = res['data']
+    return dictattr(c = c, m = m)
 
-ewmLR.output = ['c', 'm']
+ewmxLR.output = ['c', 'm']
 
 def ewmskew_(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = None, instate = None, wgt = None):
     """

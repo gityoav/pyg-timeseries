@@ -1,6 +1,6 @@
 from pyg_timeseries._decorators import compiled, mask_nans, apply_along_first_axis
-from pyg_timeseries._ewm import ewma, ewma_, ewmstd, ewmvar, ewmstd_, ewmrms, ewmrms_, ewmskew, ewmskew_, ewmvar_, ewmLR, ewmLR_, ewmGLM, ewmGLM_
-from pyg_timeseries._ewm import ewmxcor, ewmxcor_, ewmcor, ewmcor_
+from pyg_timeseries._ewm import ewma, ewma_, ewmstd, ewmvar, ewmstd_, ewmrms, ewmrms_, ewmskew, ewmskew_, ewmvar_, ewmGLM, ewmGLM_
+from pyg_timeseries._ewm import ewmxcor, ewmxcor_, ewmxLR, ewmxLR_
 from pyg_timeseries._ewm import ewmcorr, ewmcorr_, ewmcorrelation, ewmcorrelation_
 from pyg_timeseries._ewm import ewmcovar, ewmcovar_, ewmcovariance, ewmcovariance_
 from pyg_timeseries._min import rolling_min, rolling_min_, expanding_min, expanding_min_
