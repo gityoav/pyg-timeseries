@@ -61,6 +61,8 @@ def test_ewmxLR():
     a = (a0 - a1) + pd.Series(np.random.normal(0,1,10000), drange(-9999))
     b = pd.concat([a0,a1], axis=1)
     LR2 = ewmxLR(a,b,n=50, is_returns = True)
+    assert abs(LR2.m.mean()[1]+0.33)<0.5
+    assert abs(LR2.m.mean()[0]-0.33)<0.5
 
 
 
