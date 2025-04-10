@@ -541,7 +541,7 @@ def _rolling_skew(a, n, time, bias, t0, t1, t2, t3, vec, i, denom, t = np.nan):
             t2 += a[j]**2-vec[i]**2
             t3 += a[j]**3-vec[i]**3
             vec[i] = a[j]
-            res[j] = np.nan if t0<_n else skew_calculation(t0 = _n, t1 = t1, t2 = t2, t3 = t3, bias = bias, min_sample = 1)
+            res[j] = np.nan if t0<_n else skew_calculation(t0 = _n, t1 = t1, t2 = t2, t3 = t3, bias = bias)
             t = time[j]
     return res, t0, t1, t2, t3, vec, i, t
 
