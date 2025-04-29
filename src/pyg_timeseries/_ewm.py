@@ -302,8 +302,8 @@ def _ewmcorrelation(a, n, wgt, a0 = None, a1 = None, a2 = None, aa = None, prev 
     a is assumed to be total returns as opposed to deltas
     
     For each pair j>k we will store
-    prev[j,k] : prev value of j when j,k were non-nan
-    prev[k,j] : prev value of k when j,k were non-nan
+    prev[j,k,o] : o-th prev value of j when j,k were non-nan where o depends on overlapping
+    prev[k,j,o] : o-th prev value of k when j,k were non-nan
 
     a0[j,k] : the total 0th moment of j on the pairing (j,k)
     a1[j,k] : the total 1st moment of j on the pairing (j,k)
@@ -327,6 +327,7 @@ def _ewmcorrelation(a, n, wgt, a0 = None, a1 = None, a2 = None, aa = None, prev 
     aa = np.zeros((m,m)) if aa is None else aa
     w2 = np.zeros((m,m)) if w2 is None else w2
     n0 = np.zeros((m,m)) if n0 is None else n0
+    prev = np.full((m,m,overlapping), np.nan) if prev is None else prev
     for i in range(a.shape[0]):
         for j in range(m):
             if ~np.isnan(a[i,j]):
@@ -378,11 +379,11 @@ def _ewmcovariance(a, n, wgt, a0 = None, a1 = None, aa = None, prev = None, n0 =
     p = w = _w(n)
     v = (1 - w) * wgt
     res = np.full((a.shape[0], m, m), np.nan)
-    prev = np.full((m,m,overlapping), np.nan) if prev is None else prev
     a0 = np.zeros((m,m)) if a0 is None else a0
     a1 = np.zeros((m,m)) if a1 is None else a1
     aa = np.zeros((m,m)) if aa is None else aa
     n0 = np.zeros((m,m)) if n0 is None else n0
+    prev = np.full((m,m,overlapping), np.nan) if prev is None else prev
     for i in range(a.shape[0]):
         for j in range(m):
             if ~np.isnan(a[i,j]):
@@ -759,9 +760,130 @@ def xTx(x):
 
 
 @compiled
-def _ewmGLM(a, b, n, wgt, time, t, t0, a2, ab, min_weight = 0.25):
+def _ewmAAinv(a, n, wgt, overlapping = 1, prev = None, t0 = 0, n0 = 0, a2 = None, min_sample = 0.25):
     """
-    We assume b is single column while a is multicolumn. We are fitting
+    Calculates the rolling matrix 
+    
+    INV = linalg.inv(E(dA^T dA))
+    
+    
+    Example
+    --------
+    >>> from pyg import *
+    >>> da = np.random.normal(0,1,(5000,10))
+    >>> a = cumsum(da)
+    >>> a[np.random.normal(0,1,(5000,10))>3] = np.nan
+    >>> n = 30
+    >>> t0 = n0 = 0; overlapping = 1
+    >>> wgt = np.full(5000,1)
+    >>> prev = a2 = None; min_sample = 0.25
+    >>> res, t0, n0, a2, prev = _ewmAAinv(a = a, n = n, wgt = wgt, t0 = t0, n0 = n0, prev = prev)
+    """
+    m = a.shape[1]
+    w = _w(n)
+    v = (1-w) * wgt
+    res = np.full((a.shape[0], m, m), np.nan)
+    nana = np.sum(np.isnan(a), axis = 1) 
+    ok = nana == 0
+    a2 = np.full((m,m), 0.) if a2 is None else a2
+    prev = np.full((m,overlapping), np.nan) if prev is None else prev
+    for i in range(a.shape[0]):
+        if ok[i]:
+            if ~np.isnan(prev[0,-1]):
+                da = a[i] - prev[:,-1]
+                p = w 
+                n0 = n0 * p + (1-w)
+                t0 = t0 * p + v[i]
+                a2 = a2 * p + v[i] * xTx(da)
+                if n0>min_sample:
+                    try:
+                        a2i = np.linalg.inv(a2/t0)
+                        res[i] = a2i
+                    except Exception:
+                        pass
+            for o in range(overlapping-1, 0, -1):
+                prev[:,o] = prev[:,o-1]
+            prev[:,0] = a[i]
+    return res, t0, n0, a2, prev
+
+
+def _ewmGLM1d(a, b, n, wgt, AAi, overlapping = 1, ab = None, t0 = 0, n0 = 0, prev_a = None, prev_b = None, min_sample = 0.25):
+    """
+    We assume b is single column while a is multicolumn. We are fitting changes in b on changes in a
+    
+    db[i] =\sum_j m_j da_j[i]
+    
+    LSE(m) = \sum_i w_i (db[i] - \sum_j m_j * da_j[i])^2
+    dLSE/dm_k = 0  
+    <==>  \sum_i w_i (db[i] - \sum_j m_j * da_j[i]) da_k[i] = 0
+    <==>  E(db*da_k) = m_k E(da_k^2) + sum_{j<>k} m_k E(da_j da_k) 
+    
+    E is expectation under w. 
+    
+    We set
+    AA[i,j] = E(da_i da_j)
+    ab[j] = E(da_j * db)
+    
+    And invert
+    AA*m = ab
+    m = AAi.dot(ab)
+    
+    Example
+    --------
+    >>> from pyg import *
+    >>> da = np.random.normal(0,1,(5000,10))
+    >>> a = cumsum(da)
+    >>> a[np.random.normal(0,1,(5000,10))>3] = np.nan
+    >>> n = 30
+    >>> t0 = n0 = 0; overlapping = 1
+    >>> wgt = np.full(5000,1)
+    >>> prev = a2 = None; min_sample = 0.25
+
+    >>> beta = np.random.normal(1,1,10)
+    >>> db = np.sum(da * beta,axis=1) + np.random.normal(0,1,5000)
+    >>> b = cumsum(db)
+    
+    >>> overlapping = 1
+    for overlapping in range(1, 10):
+        AAi, t0, n0, a2, prev = _ewmAAinv(a = a, n = n, wgt = wgt, t0 = t0, n0 = n0, prev = prev, overlapping = overlapping)
+        res, t0, n0, ab, prev_a, prev_b = _ewmGLM1d(a = a, b = b, n = n, wgt = wgt, AAi = AAi, overlapping = overlapping, min_sample = 0.5)
+        print(pd.DataFrame(res, index = drange(-4999), columns = [f12(b) for b in beta]).median())
+    >>> pd.DataFrame(res, index = drange(-4999), columns = [f12(b) for b in beta]).plot()
+    """
+    m = a.shape[1]
+    w = _w(n)
+    v = (1-w) * wgt
+    res = np.full(a.shape, np.nan)
+    nana = np.sum(np.isnan(a), axis = 1) + np.isnan(b)
+    ok = nana == 0
+    n0 = 0
+    ab = np.full(m, 0.) if ab is None else ab
+    prev_a = np.full((m, overlapping), np.nan) if prev_a is None else prev_a
+    prev_b = np.full(overlapping, np.nan) if prev_b is None else prev_b
+    for i in range(a.shape[0]):
+        if ok[i]:
+            if ~np.isnan(prev_b[-1]):
+                db = b[i] - prev_b[-1]
+                da = a[i] - prev_a[:,-1]
+                p = w 
+                n0 = n0 * p + (1-w)
+                t0 = t0 * p + v[i]
+                ab = ab * p + v[i] * db * da
+                if n0>min_sample:
+                    a2i = AAi[i]
+                    res[i] = a2i.dot(ab/t0)
+            for o in range(overlapping-1, 0, -1):
+                prev_a[:,o] = prev_a[:,o-1]
+                prev_b[o] = prev_b[o-1]
+            prev_a[:,0] = a[i]
+            prev_b[0] = b[i]
+    return res/overlapping, t0, n0, ab, prev_a, prev_b
+
+
+@compiled
+def _ewmGLM(a, b, n, wgt, time, t = np.nan, t0 = 0, a2 = None, ab = None, min_sample = 0.25):
+    """
+    We assume b is multi column while a is multicolumn. We are fitting
     
     b[i] =\sum_j m_j a_j[i]
     
@@ -783,20 +905,27 @@ def _ewmGLM(a, b, n, wgt, time, t, t0, a2, ab, min_weight = 0.25):
     --------
     >>> from pyg import *
     >>> a = np.random.normal(0,1,(5000,10))
-    >>> m = np.random.normal(1,1,10)
+    >>> beta = np.random.normal(1,1,10)
     >>> a[a>2] = np.nan
-    >>> b = np.sum(a * m,axis=1) + np.random.normal(0,1,5000)
+    >>> b = np.sum(a * beta,axis=1) + np.random.normal(0,1,5000)
     >>> n = 30
-    >>> t = np.nan; t0 = 0; time = np.full_like(b, np.nan); a2 = np.zeros((a.shape[1],a.shape[1])); ab = np.zeros(a.shape[1])
-    >>> res = _ewmGLM(a, b, n, time, t, t0, a2, ab)
-    >>> pd.DataFrame(res[0], drange(-4999)).plot()
-    >>> pd.Series(m)
+    >>> t = np.nan; t0 = 0; 
+    >>> time = np.full_like(b, np.nan); 
+    >>> a2 = ab = None; min_sample = 0.25
+    >>> wgt = np.full(5000,1)
+    >>> res, t, t0, a2, ab = _ewmGLM(a = a, b = b, n = n, time = time, wgt = wgt, t = t)
+    >>> pd.DataFrame(res, drange(-4999)).plot()
+    >>> pd.Series(beta)
     """
+    m = a.shape[1]
     w = _w(n)
     v = (1-w) * wgt
-    res = np.empty_like(a)
+    res = np.full(a.shape, np.nan)
     nana = np.sum(np.isnan(a), axis = 1)
     i0 = 0; n0 = 0
+    ab = np.full(m, 0.) if ab is None else ab
+    a2 = np.full((m,m), 0.) if a2 is None else a2
+
     for i in range(a.shape[0]):
         if nana[i]>0 or np.isnan(b[i]):
             res[i] = np.nan
@@ -813,13 +942,15 @@ def _ewmGLM(a, b, n, wgt, time, t, t0, a2, ab, min_weight = 0.25):
                 a2 = a2 * p + v[i] * xTx(a[i])
                 t = time[i]                
             i0 = i
-            if n0>min_weight:
+            if n0>min_sample:
                 a2i = np.linalg.inv(a2/t0)
                 res[i] = a2i.dot(ab/t0)
             else:
                 res[i] = np.nan
     return res, t, t0, a2, ab
-    
+
+
+
 
 @pd2np
 @compiled
@@ -964,11 +1095,33 @@ def _ewmGLMt(a, b, n, wgt = None, time = None, t = None, t0 = 0, a2 = None, ab =
     ab = np.zeros(a.shape[1]) if ab is None else ab
     a_ = a.values if is_pd(a) else a  #np.array(list(a.values)) 
     b_ = b.values if is_pd(b) else b
-    res = _ewmGLM(a = a_, b = b_, n = n, wgt = wgt, time = time, t = t, t0 = t0, a2 = a2, ab = ab, min_weight = min_sample)
+    res = _ewmGLM(a = a_, b = b_, n = n, wgt = wgt, time = time, t = t, t0 = t0, a2 = a2, ab = ab, min_sample = min_sample)
     if is_pd(a):
          res = (pd.DataFrame(res[0], a.index, columns = a.columns),) + res[1:]
     return res
 
+
+def _ewmAAinvt(a, n, overlapping = 1, wgt = None, n0 = 0, t0 = 0, prev = None, a2 = None, min_sample = 0.25):
+    wgt = _wgt(a, wgt)
+    a_ = a.values if is_pd(a) else a
+    res = _ewmAAinv(a = a_, n = n, wgt = wgt, overlapping = overlapping, 
+                    t0 = t0, a2 = a2, n0 = n0, min_sample = min_sample, prev = prev)
+    return res
+
+
+def _ewmGLM1dt(a, b, n, AAi = None, overlapping = 1, wgt = None, n0 = 0, t0 = 0, an0 = 0, at0 = 0, prev = None, a2 = None, ab = None, prev_a = None, prev_b = None, min_sample = 0.25):
+    wgt = _wgt(a, wgt)
+    a_ = a.values if is_pd(a) else a
+    b_ = b.values if is_pd(b) else b
+    if AAi is None:
+        AAi, at0, an0, a2, prev = _ewmAAinv(a = a_, n = n, wgt = wgt, overlapping = overlapping, t0 = at0, a2 = a2, n0 = an0, min_sample = min_sample, prev = prev)
+    data, t0, n0, ab, prev_a, prev_b = _ewmGLM1d(a = a_, b = b_, n = n, wgt = wgt, AAi = AAi, 
+                                                 overlapping = overlapping, ab = ab, t0 = t0, n0 = n0, 
+                                                 prev_a = prev_a, prev_b = prev_b, min_sample = min_sample)
+    if is_pd(a):
+         data= pd.DataFrame(data, a.index, columns = a.columns)
+
+    return data, t0, n0, ab, prev_a, prev_b, at0, an0, a2, prev
 
 @loop_all
 def _ewmskewt(a, n, wgt = None, time = None, t = None, bias = False, t0 = 0, t1 = 0, t2 = 0, t3 = 0, min_sample = 0.25):
@@ -1528,18 +1681,40 @@ def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None,
 
 
 
-def ewmGLM_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None):
+def ewmAAi_(a, n, overlapping = 1, wgt = None, data = None, instate = None, min_sample = 0.25):
+    state = instate or {}    
+    return _data_state(['data', 't0', 'n0', 'a2', 'prev'], 
+                       _ewmAAinvt(a = a, n = n, wgt = wgt, overlapping = overlapping, min_sample=min_sample, **state))
+
+
+def ewmAAi(a, n,  overlapping = 1, wgt = None, data = None, state = None, min_sample = 0.25):
+    """
+    Example:
+    --------
+    >>> from pyg import *
+    >>> da = np.random.normal(0,1,(5000,10))
+    >>> a = cumsum(da)
+    >>> a[np.random.normal(0,1,(5000,10))>3] = np.nan
+    >>> n = 30
+    >>> overlapping = 1
+    >>> res = ewmAAi(a = a, n = n, wgt = wgt)
+
+    """
+    state = state or {}    
+    return first_(_ewmAAinvt(a = a, n = n, wgt = wgt, min_sample=min_sample, overlapping = overlapping, **state))
+
+
+def ewmGLM_(a, b, n, overlapping = 1, AAi = None, min_sample = 0.25, data = None, instate = None, wgt = None):
     """
     Equivalent to ewmGLM but returns a state parameter for instantiation of later calculations.
     See ewmGLM documentation for more details
     """
-    state = instate or {}    
-    return _data_state(['data', 't', 't0', 'a2', 'ab'], _ewmGLMt(a = a, b = b, n = n, time = time, wgt = wgt, min_sample=min_sample, **state))
+    state = instate or {} 
+    return _data_state(['data', 't0', 'n0', 'ab', 'prev_a', 'prev_b', 'at0', 'an0', 'a2', 'prev'], _ewmGLM1dt(a = a, b = b, n = n, AAi = AAi, overlapping = overlapping, wgt = wgt, min_sample=min_sample, **state))
 
 ewmGLM_.output = ['data', 'state']
 
-
-def ewmGLM(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, state = None, wgt = None):
+def ewmGLM(a, b, n, overlapping = 1, AAi = None, min_sample = 0.25, data = None, state = None, wgt = None):
     """
     Calculates a General Linear Model fitting b to a.
     
@@ -1549,11 +1724,7 @@ def ewmGLM(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, st
     b : a 1-d array/pd.Series
     n : int/fraction
         The number or days (or a ratio) to scale the history
-    time : Calendar, 'b/d/y/m' or a timeseries of time (use clock(a) to see output)
-        If time parameter is provided, we allow multiple observations per unit of time. i.e., converging to the last observation in time unit. 
-            - if we have intraday data, and set time = 'd', then 
-            - the ewm calculation on last observations per day is what is retained. 
-            - the ewm calculation on each intraday observation is same as an ewm(past EOD + current intraday observation)
+    overlapping : integer
     min_sample : floar, optional
         minimum weight of observations before we return the fitting. The default is 0.25. This ensures that we don't get silly numbers due to small population.
     data : place holder, ignore, optional
@@ -1585,16 +1756,35 @@ def ewmGLM(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, st
     :Example: simple fit
     --------------------
     >>> from pyg import *
-    >>> a = pd.DataFrame(np.random.normal(0,1,(10000,10)), drange(-9999))
+    >>> da = pd.DataFrame(np.random.normal(0,1,(10000,10)), drange(-9999))
+    >>> a = cumsum(da)
+    >>> AAi = timer(ewmAAi, n = 10)(a, n = 50)
+
     >>> true_m = np.random.normal(1,1,10)
     >>> noise = np.random.normal(0,1,10000)
-    >>> b = (a * true_m).sum(axis = 1) + noise
+    >>> db = (da * true_m).sum(axis = 1) + noise
+    >>> b = cumsum(db)    
+
+    >>> fitted_m = timer(ewmGLM, n=10)(a, b, AAi = AAi, n = 50)    
+    >>> fitted_m = timer(ewmGLM, n=10)(a, b, n = 50)    
+    >>> fitted_m.columns = true_m        
+    >>> fitted_m.mean()
     
-    >>> fitted_m = ewmGLM(a, b, 50)    
-        
+    Out[183]: 
+    True        fitted
+    -0.182861   -0.190628
+     1.876712    1.868642
+     2.953725    2.965523
+     1.161829    1.146972
+     1.057438    1.054367
+     0.427547    0.436873
+     2.251367    2.257537
+    -0.559213   -0.553437
+     0.773389    0.755458
+    -0.598162   -0.610284
     """
     state = state or {}    
-    return first_(_ewmGLMt(a = a, b = b, n = n, time = time, wgt = wgt, min_sample=min_sample, **state))
+    return first_(_ewmGLM1dt(a = a, b = b, n = n, AAi = AAi, overlapping = overlapping, wgt = wgt, min_sample=min_sample, **state))
 
 
 
