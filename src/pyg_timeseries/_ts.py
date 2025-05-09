@@ -291,7 +291,7 @@ def _ts_cor(a, b, min_sample, vec):
             res[3] += b[i]
             res[4] += b[i]**2
             res[5] += a[i]*b[i]
-    return cor_calculation(t0 = res[0], a1 = res[1], a2 = res[2], b1 = res[3], b2 = res[4], ab = res[5], min_sample = min_sample), res
+    return cor_calculation(t0 = res[0], a1 = res[1], a2 = res[2], b1 = res[3], b2 = res[4], ab = res[5], min_sample = min_sample) if res[0]>min_sample else np.nan, res
     
 
 def ts_cor(a, b, min_sample = 3, axis = 0, data = None, state = None):
@@ -465,7 +465,7 @@ def ts_rms_(a, axis = 0, data = None, instate = None):
 def _ts_skew(a, bias = False, min_sample = 0.25, vec = None):
     vec = _vec(a, vec, 4, 0.)
     vec = _moments(a, vec)
-    return skew_calculation(t0 = vec[0], t1 = vec[1], t2 = vec[2], t3 = vec[3], bias = bias, min_sample = min_sample), vec
+    return skew_calculation(t0 = vec[0], t1 = vec[1], t2 = vec[2], t3 = vec[3], bias = bias) if vec[0] > min_sample else np.nan, vec
 
 def ts_skew(a, bias = False, min_sample = 0.25, axis = 0, data = None, state = None):
     """
