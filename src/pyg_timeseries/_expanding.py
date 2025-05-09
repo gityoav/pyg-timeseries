@@ -1,7 +1,7 @@
 import numpy as np
 from pyg_timeseries._math import stdev_calculation, skew_calculation
 from pyg_timeseries._decorators import compiled, first_, _data_state
-from pyg_base import pd2np, loop_all
+from pyg_base import pd2np, loop_all, is_num
 
 __all__ = ['cumsum', 'cumprod', ]
 __all__ += ['expanding_mean', 'expanding_sum', 'expanding_rms', 'expanding_std', 'expanding_skew']
@@ -364,7 +364,7 @@ def expanding_sum(a, axis = 0, data = None, state = None):
         
     :Example: agreement with pandas
     --------------------------------
-    >>> from pyg import *; import pandas as pd; import numpy as np
+    >>> from pyg_base import *; import pandas as pd; import numpy as np
     >>> a = pd.Series(np.random.normal(0,1,10000), drange(-9999))
     >>> panda = a.expanding().sum(); ts = expanding_sum(a)
     >>> assert eq(ts,panda)    
@@ -408,6 +408,7 @@ def expanding_sum(a, axis = 0, data = None, state = None):
 
     """
     state = state or {}
+    state = dict(t1 = state) if is_num(state) else state
     return first_(_expanding_sum(a, axis = axis, **state))
 
 def expanding_std(a, axis = 0, data = None, state = None):

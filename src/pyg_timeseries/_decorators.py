@@ -1,6 +1,9 @@
 from pyg_base import getargspec, getcallarg, first, Dict, loop, zipper, as_list, getargs, wrapper, skip_if_data_pd, dt, is_pd
+from pyg_base import wrapper, is_ts, is_dict, is_tuple, getargspec, loop, first, Dict, zipper
+
 from numba import njit
 import numpy as np
+import pandas as pd
 
 __all__ = ['compiled']
 
@@ -129,8 +132,8 @@ class mask_nans(wrapper):
     """
     This wrapper allows us to operate in as if nan's are not actually provided
     """
-    def __init__(self, function = None, apply_axis = None, exclude_any_nan = False):
-        return super(mask_nans, self).__init__(function = function, apply_axis = apply_axis, exclude_any_nan = exclude_any_nan)
+    def __init__(self, function = None, apply_axis = None, exclude_any_nan = False, function_fullargspec = None):
+        return super(mask_nans, self).__init__(function = function, apply_axis = apply_axis, exclude_any_nan = exclude_any_nan, function_fullargspec  = function_fullargspec )
 
     def wrapped(self, *args, **kwargs):
         arg = getcallarg(self.function, args, kwargs)
@@ -239,8 +242,6 @@ class apply_along_first_axis(wrapper):
         else:
             return np.array(res)
 
-import pandas as pd
-from pyg.base import wrapper, is_ts, is_dict, is_tuple, getargspec, loop, first, Dict, zipper
 
 class persist_data(wrapper):
     """
