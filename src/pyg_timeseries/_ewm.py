@@ -120,9 +120,11 @@ def _prev(prev, shape):
         return prev
 
 
-def _ewmx(a, b, n, wgt, time, t = None,
+
+@compiled
+def _ewmx(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
           a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, 
-             w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, calculation = cor_calculation_ewm, int8 = None):
+             w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, calculation = cor_calculation_ewm):
     """
     cross-sectional correlation of a and b
     
@@ -137,13 +139,9 @@ def _ewmx(a, b, n, wgt, time, t = None,
     >>> res = _ewmx(a, b, n, wgt, time = time, t = None, a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, calculation = cor_calculation_ewm)[0][0]
     
     """
-    
     x = a.shape[1]
     y = b.shape[1]
-    if int8:
-        res0 = np.full((a.shape[0], x, y), 127 if int8<127 else 32767, dtype = np.int8 if int8 < 127 else np.int16)
-    else:        
-        res0 = np.full((a.shape[0], x, y), np.nan)
+    res0 = np.full((a.shape[0], x, y), NAN, dtype = dtype)
     if n == 1:
        return (res0,), a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t
     p = w = _w(n)
@@ -202,8 +200,7 @@ def _ewmx(a, b, n, wgt, time, t = None,
                     if n0[j,k] > min_sample:
                         c = calculation(t0 = w1[j,k], a1 = a1[j,k], a2 = a2[j,k], 
                                                            w2 = w2[j,k], b1 = b1[j,k], b2 = b2[j,k], ab = ab[j,k], bias = bias) 
-                        if int8:
-                            c = np.round(c * int8)
+                        c = NAN if np.isnan(c) else c * ONE
                         res0[i, j, k] = c
                     for o in range(overlapping-1, 0, -1):
                         prev_a[j,k,o] = prev_a[j,k,o-1]
@@ -214,7 +211,7 @@ def _ewmx(a, b, n, wgt, time, t = None,
 
 
 @compiled
-def _ewmx2(a, b, n, wgt, time, t = None,
+def _ewmx2(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
           a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, 
              w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, calculation = LR_calculation_ewm):
     """
@@ -234,8 +231,8 @@ def _ewmx2(a, b, n, wgt, time, t = None,
     
     x = a.shape[1]
     y = b.shape[1]
-    res0 = np.full((a.shape[0], x, y), np.nan)    
-    res1 = np.full((a.shape[0], x, y), np.nan)    
+    res0 = np.full((a.shape[0], x, y), NAN, dtype = dtype)    
+    res1 = np.full((a.shape[0], x, y), NAN, dtype = dtype)    
     if n == 1:
        return (res0,res1), a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t
     p = w = _w(n)
@@ -294,6 +291,8 @@ def _ewmx2(a, b, n, wgt, time, t = None,
                     if n0[j,k] > min_sample:
                         c1, c2 = calculation(t0 = w1[j,k], a1 = a1[j,k], a2 = a2[j,k], 
                                                            w2 = w2[j,k], b1 = b1[j,k], b2 = b2[j,k], ab = ab[j,k], bias = bias) 
+                        c1 = NAN if np.isnan(c1) else ONE * c1
+                        c2 = NAN if np.isnan(c2) else ONE * c2                        
                         res0[i, j, k], res1[i, j, k] = c1, c2 
                     for o in range(overlapping-1, 0, -1):
                         prev_a[j,k,o] = prev_a[j,k,o-1]
@@ -302,7 +301,8 @@ def _ewmx2(a, b, n, wgt, time, t = None,
                     prev_b[j,k,0] = b[i,k]                 
     return (res0,res1), a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t
 
-def _ewmcorrelation(a, n, wgt, a0 = None, a1 = None, a2 = None, aa = None, prev = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, int8 = None):
+@compiled
+def _ewmcorrelation(a, n, wgt, dtype, NAN = np.nan, ONE = 1.0, a0 = None, a1 = None, a2 = None, aa = None, prev = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1):
     """
     synchronized correlation calculation
     a is assumed to be total returns as opposed to deltas
@@ -320,16 +320,13 @@ def _ewmcorrelation(a, n, wgt, a0 = None, a1 = None, a2 = None, aa = None, prev 
     a2[j,k] : the total 2nd moment of k on the pairing (j,k)
     
     """
+
     m = a.shape[1]
+    res = np.full((a.shape[0], m, m), NAN, dtype = dtype)
     if n == 1:
-        return np.full((a.shape[0], m, m), np.nan), a0, a1, a2, aa, prev, w2, n0
+        return res, a0, a1, a2, aa, prev, w2, n0
     p = w = _w(n)
-    v = (1 - w) * wgt
-    if int8:
-        res = np.full((a.shape[0], m, m), 127 if int8<127 else 32767, dtype = np.int8 if int8 < 127 else np.int16)
-    else:
-        res = np.full((a.shape[0], m, m), np.nan)
-    
+    v = (1 - w) * wgt    
     a0 = np.zeros((m,m)) if a0 is None else a0
     a1 = np.zeros((m,m)) if a1 is None else a1
     a2 = np.zeros((m,m)) if a2 is None else a2
@@ -343,7 +340,7 @@ def _ewmcorrelation(a, n, wgt, a0 = None, a1 = None, a2 = None, aa = None, prev 
                 a0[j,j] = a0[j,j] * p + v[i]
                 n0[j,j] = n0[j,j] * p + (1-w)
                 if n0[j,j] > min_sample:
-                    res[i,j,j] = int8 if int8 else 1.0 
+                    res[i,j,j] = ONE
                 for k in range(j):
                     if ~np.isnan(a[i,k]):
                         if ~np.isnan(prev[j,k,-1]) and ~np.isnan(prev[k,j,-1]):
@@ -365,8 +362,7 @@ def _ewmcorrelation(a, n, wgt, a0 = None, a1 = None, a2 = None, aa = None, prev 
                                                                                   b1 = a1[k,j], 
                                                                                   b2 = a2[k,j], 
                                                                                   ab = aa[j,k], bias = bias) 
-                                if int8:
-                                    c = np.round(int8 * c, 0)
+                                c = NAN if np.isnan(c) else ONE * c
                                 res[i, k, j] = res[i, j, k] = c 
                         for o in range(overlapping-1, 0, -1):
                             prev[j,k,o] = prev[j,k,o-1]
@@ -378,14 +374,14 @@ def _ewmcorrelation(a, n, wgt, a0 = None, a1 = None, a2 = None, aa = None, prev 
 
 
 
-
 @compiled
-def _ewmcovariance(a, n, wgt, a0 = None, a1 = None, aa = None, prev = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1):
+def _ewmcovariance(a, n, wgt, dtype, NAN = np.nan, ONE = 1.0, a0 = None, a1 = None, aa = None, prev = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1):
     """
-
+    a = a.values if isinstance(a, pd.DataFrame) else a; n = 30; wgt = np.ones(len(a))
+    a0 = None; a1 = None; aa = None; prev = None; n0 = None; min_sample = 0.25; bias = False; overlapping = 1; dtype = None
     """
     m = a.shape[1]
-    res = np.full((a.shape[0], m, m), np.nan), a0, a1, aa, prev, n0
+    res = np.full((a.shape[0], m, m), np.nan, dtype = dtype)
     if n == 1:
         return res, a0, a1, aa, prev, n0
     p = w = _w(n)
@@ -409,10 +405,11 @@ def _ewmcovariance(a, n, wgt, a0 = None, a1 = None, aa = None, prev = None, n0 =
                             a1[k,j] = a1[k,j] * p + v[i] * dy
                             aa[j,k] = aa[k,j] = aa[j,k] * p + v[i] * dx * dy
                             if n0[j,k] > min_sample:
-                                res[i, k, j] = res[i, j, k] = covariance_calculation(a0 = a0[j,k], a1 = a1[j,k], 
+                                c = covariance_calculation(a0 = a0[j,k], a1 = a1[j,k], 
                                                                            b0 = a0[k,j], b1 = a1[k,j],
                                                                            ab = aa[j,k], ab0 = a0[j,k],
-                                                                           bias = bias)                    
+                                                                           bias = bias)
+                                res[i, k, j] = res[i, j, k] = NAN if np.isnan(c) else ONE * c
                         if overlapping > 1:
                             prev[j,k,1:] = prev[j,k,:-1]
                             prev[k,j,1:] = prev[k,j,:-1]
@@ -422,7 +419,7 @@ def _ewmcovariance(a, n, wgt, a0 = None, a1 = None, aa = None, prev = None, n0 =
 
 
 
-def ewmcovariance_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None):
+def ewmcovariance_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None):
     """
     This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
     
@@ -442,13 +439,13 @@ def ewmcovariance_(a, n, min_sample = 0.25, bias = False, overlapping = 1, insta
         wgt = np.full(arr.shape[0], 1)
     state['prev'] = _prev(state.get('prev'), (arr.shape[1],arr.shape[1],overlapping))
     if isinstance(arr, np.ndarray):
-        res, a0, a1, aa, prev, n0 = _ewmcovariance(arr, n, wgt = wgt, min_sample = min_sample, bias = bias, overlapping = overlapping, **state)
+        res, a0, a1, aa, prev, n0 = _ewmcovariance(arr, n, wgt = wgt, min_sample = min_sample, bias = bias, overlapping = overlapping, dtype = dtype, **state)
         state = dictattr(a0=a0, a1=a1, aa=aa, prev = prev, n0 = n0)
         return dictattr(data = res, columns = None, index = None, state = state)
     elif is_df(arr):
         index = arr.index
         columns = list(arr.columns)
-        res, a0, a1, aa, prev, n0 = _ewmcovariance(arr.values, n, wgt = wgt, min_sample = min_sample, overlapping = overlapping, bias = bias, **state)
+        res, a0, a1, aa, prev, n0 = _ewmcovariance(arr.values, n, wgt = wgt, min_sample = min_sample, overlapping = overlapping, bias = bias, dtype = dtype, **state)
         state = dictattr(a0=a0, a1=a1, aa=aa, prev = prev, n0 = n0)
         return dictattr(data = res, columns = columns, index = index, state = state)
     else:
@@ -457,7 +454,7 @@ def ewmcovariance_(a, n, min_sample = 0.25, bias = False, overlapping = 1, insta
 ewmcovariance_.output = ['data', 'columns', 'index', 'state']
 
 
-def ewmcovariance(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None):
+def ewmcovariance(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None):
     """
     This calculates a full covariance matrix as a timeseries. 
 
@@ -481,8 +478,9 @@ def ewmcovariance(a, n, min_sample = 0.25, bias = False, overlapping = 1, instat
         
     :Example: a pair of ts
     ---------
-    >>> a = pd.DataFrame(np.random.normal(0,1,(10000,10)), drange(-9999))
-    >>> cov1_ = ewmcovariance_(cumsum(a), 250)
+    >>> rtn = pd.DataFrame(np.random.normal(0,1,(10000,10)), drange(-9999))
+    >>> a = cumsum(a)
+    >>> cov1_ = timer(ewmcovariance)(a, 250)
     >>> cov2_ = ewmcovar_(a, 250)
     >>> cov1 = cov1_['data']
     >>> cov2 = cov2_['data']
@@ -502,11 +500,11 @@ def ewmcovariance(a, n, min_sample = 0.25, bias = False, overlapping = 1, instat
     >>> cor.plot()
     >>> assert cor.max() < 0.3 and cor.min() > -0.3
     """
-    return ewmcovariance_(a, n, wgt = wgt, min_sample = min_sample, bias = bias, overlapping = overlapping, instate = instate , join = join, method = method).get('data')
+    return ewmcovariance_(a, n, wgt = wgt, min_sample = min_sample, bias = bias, overlapping = overlapping, instate = instate , join = join, method = method, dtype = dtype).get('data')
 
 
 
-def ewmcovar_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None):
+def ewmcovar_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None):
     """
     This calculates a full covariance matrix as a timeseries. Also returns the recent state of the calculations.
     
@@ -525,12 +523,12 @@ def ewmcovar_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = 
     if wgt is None:
         wgt = np.full(arr.shape[0], 1)
     state['prev'] = state.get('prev') or 0.
-    return ewmcovariance_(cumsum(arr), wgt = wgt, n = n, min_sample=min_sample, overlapping = overlapping, bias = bias, instate = state, join = join, method = method)   
+    return ewmcovariance_(cumsum(arr), wgt = wgt, n = n, min_sample=min_sample, overlapping = overlapping, bias = bias, instate = state, join = join, method = method, dtype = dtype)   
 
 ewmcovar_.output = ['data', 'columns', 'index', 'state']
 
 
-def ewmcovar(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None):
+def ewmcovar(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None):
     """
     This calculates a full covariance matrix as a timeseries. 
 
@@ -567,10 +565,10 @@ def ewmcovar(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = N
     >>> cov.plot()
     >>> assert cov.max() < 0.3 and cor.min() > -0.3
     """
-    return ewmcovar_(a, n, wgt = wgt, min_sample = min_sample, bias = bias, instate = instate , join = join, method = method).get('data')
+    return ewmcovar_(a, n, wgt = wgt, min_sample = min_sample, bias = bias, instate = instate , join = join, method = method, dtype = dtype).get('data')
 
 
-def ewmcorr_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, int8 = None):
+def ewmcorr_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None):
     """
     This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
     See ewmcorr for full details.
@@ -582,12 +580,12 @@ def ewmcorr_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = N
         wgt = np.full(arr.shape[0], 1)
     if overlapping == 1:
         state['prev'] = state.pop('prev', np.zeros((arr.shape[1], arr.shape[1], 1)))
-    return ewmcorrelation_(cumsum(arr), wgt = wgt, n = n, min_sample=min_sample, bias = bias, overlapping = overlapping, instate = state, join = join, method = method, int8 = int8)   
+    return ewmcorrelation_(cumsum(arr), wgt = wgt, n = n, min_sample=min_sample, bias = bias, overlapping = overlapping, instate = state, join = join, method = method, dtype = dtype)   
 
 ewmcorr_.output = ['data', 'state', 'index', 'columns']
 
 
-def ewmcorr(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, int8 = None):
+def ewmcorr(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None):
     """
     This calculates a full correlation matrix as a timeseries. 
 
@@ -618,7 +616,7 @@ def ewmcorr(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = No
     >>> x1 = ewmacd(adj, 20, 40, 30)[50:]
     >>> a = pd.DataFrame(np.array([x0,x1]).T, drange(-9949))
     >>> n = 30
-    >>> res = ewmcorr(a, n, int8 = 100)
+    >>> res = ewmcorr(a, n, dtype = np.int8)
     >>> ts = pd.Series(res[:,0,1], a.index)
 
     >>> ts    
@@ -675,9 +673,9 @@ def ewmcorr(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = No
     2025-03-10  1.0  0.846466  0.673574
     
     """
-    return ewmcorr_(a, n, wgt = wgt, min_sample = min_sample, bias = bias, overlapping = overlapping, instate = instate, join = join, method = method, int8 = int8).get('data')
+    return ewmcorr_(a, n, wgt = wgt, min_sample = min_sample, bias = bias, overlapping = overlapping, instate = instate, join = join, method = method, dtype = dtype).get('data')
 
-def ewmcorrelation_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, int8 = None):
+def ewmcorrelation_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None):
     """
     This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
     See ewmcorrelation for full details.
@@ -685,17 +683,20 @@ def ewmcorrelation_(a, n, min_sample = 0.25, bias = False, overlapping = 1, inst
     """
     state = {} if instate is None else instate
     arr = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
+    dtype = dtype or np.float32
+    NAN = {np.int8: 127, np.int16: 32767}.get(dtype, np.nan)
+    ONE = {np.int8: 100, np.int16: 10000}.get(dtype, 1.0)
     if wgt is None:
         wgt = np.full(arr.shape[0], 1)
     state['prev'] = _prev(state.get('prev'), (arr.shape[1],arr.shape[1],overlapping))
     if isinstance(arr, np.ndarray):
-        res, a0, a1, a2, aa, prev, w2, n0 = _ewmcorrelation(arr, wgt = wgt, n = n, min_sample = min_sample, bias = bias, overlapping = overlapping, int8 = int8, **state)
+        res, a0, a1, a2, aa, prev, w2, n0 = _ewmcorrelation(arr, wgt = wgt, n = n, min_sample = min_sample, bias = bias, overlapping = overlapping, dtype = dtype, ONE = ONE, NAN = NAN, **state)
         state = dictattr(a0=a0, a1=a1, a2=a2, aa=aa, prev = prev, w2 = w2, n0 = n0)
         return dictattr(data = res, index = None, columns = None, state = state)
     elif is_df(arr):
         index = arr.index
         columns = list(arr.columns)
-        res, a0, a1, a2, aa, prev, w2, n0 = _ewmcorrelation(arr.values, wgt = wgt, n = n, min_sample = min_sample, bias = bias, overlapping = overlapping, int8 = int8, **state)
+        res, a0, a1, a2, aa, prev, w2, n0 = _ewmcorrelation(arr.values, wgt = wgt, n = n, min_sample = min_sample, bias = bias, overlapping = overlapping, dtype = dtype, ONE = ONE, NAN = NAN, **state)
         state = dictattr(a0=a0, a1=a1, a2=a2, aa=aa, prev=prev, w2 = w2, n0 = n0)
         return dictattr(data = res, columns = columns, index = index, state = state)
     else:
@@ -704,7 +705,7 @@ def ewmcorrelation_(a, n, min_sample = 0.25, bias = False, overlapping = 1, inst
 ewmcorrelation_.output = ['data', 'state', 'index', 'columns']
 
 
-def ewmcorrelation(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, int8 = None):
+def ewmcorrelation(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None):
     """
     This calculates a full correlation matrix as a timeseries. 
 
@@ -732,6 +733,7 @@ def ewmcorrelation(a, n, min_sample = 0.25, bias = False, overlapping = 1, insta
     >>> join = 'outer'; method = None
     >>> rtn = np.random.normal(0,1,10000)
     >>> adj = cumsum(rtn)
+    >>> from pyg_timeseries import ewmacd
     >>> x0 = ewmacd(adj, 10, 20, vol = 18)
     >>> x1 = ewmacd(adj, 20, 40, vol = 18)
     >>> x2 = ewmacd(adj, 40, 80, vol = 18)
@@ -739,7 +741,9 @@ def ewmcorrelation(a, n, min_sample = 0.25, bias = False, overlapping = 1, insta
     >>> x1[np.random.normal(0,1,10000)>1] = np.nan
     >>> x2[np.random.normal(0,1,10000)>1] = np.nan
     >>> a = pd.DataFrame(np.array([x0,x1,x2]).T, drange(-9999), ['a','b','c'])
-    >>> ds = ewmcorrelation(a, 30)
+    >>> ds = ewmcorrelation(a, 30, dtype = np.int16)
+    >>> ds = ewmcovariance(a, 30, dtype = np.float32)
+    >>> ds = ewmxcor(a, a, 30, dtype = np.float64)
     >>> ds2 = ewmcorrelation(a, 30, overlapping = 5)
     >>> c = ewmcorr(diff(a), 30)
     >>> ds.shape
@@ -757,7 +761,7 @@ def ewmcorrelation(a, n, min_sample = 0.25, bias = False, overlapping = 1, insta
     >>> a_vs_all.ffill().plot()
         
     """
-    return ewmcorrelation_(a, n, min_sample = min_sample, bias = bias, overlapping = overlapping, instate = instate , join = join, method = method, wgt = wgt, int8 = int8).get('data')
+    return ewmcorrelation_(a, n, min_sample = min_sample, bias = bias, overlapping = overlapping, instate = instate , join = join, method = method, wgt = wgt, dtype = dtype).get('data')
 
 
 
@@ -1051,7 +1055,7 @@ def _reshape(res, reshape_a, reshape_b):
 def _ewmxt(a, b, n, wgt = None, time = None, t = None, a1 = None, a2 = None, b1 = None, b2 = None, 
               ab = None, w1 = None, w2 = None, n0 = None, prev_a = None, prev_b = None, 
               min_sample = 0.25, bias = False, overlapping = 1, 
-              calculation = cor_calculation_ewm, dim = None, int8 = None):
+              calculation = cor_calculation_ewm, dim = None, dtype = None):
     """
     a1 = None; a2 = None; b1 = None; b2 = None; ab = None; w1 = None; w2 = None; n0 = None; min_sample = 0.25; bias = False
     wgt = time = t = dim = None
@@ -1074,15 +1078,18 @@ def _ewmxt(a, b, n, wgt = None, time = None, t = None, a1 = None, a2 = None, b1 
     prev_a = _prev(prev_a, (a.shape[1], b.shape[1], overlapping))
     prev_b = _prev(prev_b, (a.shape[1], b.shape[1], overlapping))
     dim = _dim(calculation = calculation, dim = dim)
+    dtype = dtype or np.float32
+    NAN = {np.int8: 127, np.int16: 32767}.get(dtype, np.nan)
+    ONE = {np.int8: 100, np.int16: 10000}.get(dtype, 1.0)
     if dim == 1:
         res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t = _ewmx(a = a, b = b, n = n, wgt = wgt, time = time,
                        a1 = a1, a2 = a2, b1 = b1, b2 = b2, w1 = w1, w2 = w2, n0 = n0, prev_a = prev_a, prev_b = prev_b,
-                       ab = ab, min_sample=min_sample, bias = bias, overlapping = overlapping, calculation=calculation, int8 = int8)
+                       ab = ab, min_sample=min_sample, bias = bias, overlapping = overlapping, calculation=calculation, dtype = dtype, NAN = NAN, ONE = ONE)
         res = res[0]
     else:
         res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t = _ewmx2(a = a, b = b, n = n, wgt = wgt, time = time,
                        a1 = a1, a2 = a2, b1 = b1, b2 = b2, w1 = w1, w2 = w2, n0 = n0, prev_a = prev_a, prev_b = prev_b,
-                       ab = ab, min_sample=min_sample, bias = bias, overlapping = overlapping, calculation=calculation)
+                       ab = ab, min_sample=min_sample, bias = bias, overlapping = overlapping, calculation=calculation, dtype = dtype, NAN = NAN, ONE = ONE)
     res = _reshape(res, reshape_a = reshape_a, reshape_b = reshape_b)
     return res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t        
 
@@ -1608,7 +1615,7 @@ def _to_pandas(res, a, b):
     return res
 
 def ewmx_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, 
-             overlapping = 1, join = 'outer', method = None, calculation = cor_calculation_ewm, is_returns = False, dim = None, int8 = None):
+             overlapping = 1, join = 'outer', method = None, calculation = cor_calculation_ewm, is_returns = False, dim = None, dtype = None):
     """
     Equivalent to ewmxcor but returns a state parameter for instantiation of later calculations.
     See ewmxcor documentation for more details
@@ -1633,7 +1640,7 @@ def ewmx_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, ins
                                                                  bias = bias, 
                                                                  overlapping = overlapping, 
                                                                  calculation = calculation,
-                                                                 dim = dim, int8 = int8,
+                                                                 dim = dim, dtype = dtype,
                                                                  **state)
 
     state = dictattr(a1=a1, a2=a2, b1 = b1, b2 = b2, ab=ab, prev_a = prev_a, prev_b = prev_b, w1 = w1, w2 = w2, n0 = n0, t = t)
@@ -1642,16 +1649,16 @@ def ewmx_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, ins
 
 
 def ewmxcor_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, overlapping = 1, 
-             join = 'outer', method = None, is_returns = False, int8 = None):
+             join = 'outer', method = None, is_returns = False, dtype = None):
 
     return ewmx_(a, b, n, time = time, min_sample = min_sample, bias = bias, data = data, instate = instate, wgt = wgt, 
-                 overlapping = overlapping, join = join, method = method, calculation = cor_calculation_ewm, is_returns=is_returns, int8 = int8)
+                 overlapping = overlapping, join = join, method = method, calculation = cor_calculation_ewm, is_returns=is_returns, dtype = dtype)
 
 ewmxcor_.output = ['data', 'state']
 
 
 def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, 
-            wgt = None, overlapping = 1, is_returns = False, int8 = None):
+            wgt = None, overlapping = 1, is_returns = False, dtype = None):
     """
     calculates pair-wise correlation between a and b returns, assuming a and b are TOTAL returns
     
@@ -1680,7 +1687,7 @@ def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None,
     >>> import pandas as pd; import numpy as np; 
     >>> a = pd.Series(np.random.normal(0,1,9000), drange(-8999))
     >>> b = pd.Series(np.random.normal(0,1,9000), drange(-8999))
-    >>> ts = ewmxcor(a, b, n = 10, int8 = 100)
+    >>> ts = ewmxcor(a, b, n = 10, dtype = np.int8)
     ts.plot()
 
     :Example: numpy arrays support
@@ -1691,7 +1698,7 @@ def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None,
     ----------------------    
     """
     return ewmxcor_(a = a, b = b, n = n, min_sample = min_sample, bias = bias, data = data, 
-                    instate = state, wgt = wgt, overlapping = overlapping, is_returns = is_returns, int8 = int8).get('data')
+                    instate = state, wgt = wgt, overlapping = overlapping, is_returns = is_returns, dtype = dtype).get('data')
 
 
 
