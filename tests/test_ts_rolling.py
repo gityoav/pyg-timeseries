@@ -35,3 +35,10 @@ def test_rolling_empty():
         for f in [rolling_max, rolling_mean, rolling_median, rolling_quantile, rolling_rank, rolling_rms, rolling_skew, rolling_std, rolling_sum]:
             res = f(a, 20)
             assert eq(res, a)
+
+
+def test_not_enough_data_goes_to_nan():
+    inputs = [np.full(100, np.nan), np.concatenate([np.full(100, np.nan), [0]*3])]
+    for a in inputs:
+        b = rolling_max(a, 10)
+        assert np.min(np.isnan(b))        

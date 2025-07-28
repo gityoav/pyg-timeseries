@@ -199,7 +199,10 @@ def _rolling_window(a, window, min_count, func, vec = None, axis = 0):
     if len(vec):
         na = np.concatenate([vec,na])
     w = na.shape[0] if window == 0 else window        
-    res = func(na, w, min_count)
+    if len(na) < w:
+        res = np.full(na.shape, np.nan)
+    else:
+        res = func(na, w, min_count)
     if len(vec):
         res = res[-n:] 
     va = a.copy()
