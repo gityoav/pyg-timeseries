@@ -99,6 +99,20 @@ def _ffill2d(a, n, prev, i):
     return res, prev, i
 
 
+@loop_all
+@pd2np
+@compiled
+def _init2v(a, n = 0, new = np.nan):
+    res = a.copy()
+    i = 0
+    while i < a.shape[0] and n > 0:
+        if ~np.isnan(a[i]):
+            res[i] = new
+            n = n-1
+        i+=1
+    return res
+
+
 @loop(dict, list)
 @pd2np
 def _ffill(a, n = 0, prev = None, i = None):
@@ -119,27 +133,9 @@ def _ffill(a, n = 0, prev = None, i = None):
 
 
 
-@loop_all
+@loop(dict, list)
 @pd2np
-@compiled
-def _init2v(a, n = 0, new = np.nan):
-    res = a.copy()
-    i = 0
-    while i < a.shape[0] and n > 0:
-        if ~np.isnan(a[i]):
-            res[i] = new
-            n = n-1
-        i+=1
-    return res
-
-
-@loop_all
-@pd2np
-@compiled
 def _bfill(a, limit = -1):
-    """
-    _bfill(np.array([np.nan, 1., np.nan])) 
-    """
     if is_num(a):
         return a
     res = a.copy()
