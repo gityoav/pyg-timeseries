@@ -49,27 +49,50 @@ def _ewmrms(a, n, time, wgt, t = np.nan, t0 = 0., t2 = 0., exc_zero = False, max
     v = (1-w) * wgt
     res = np.empty_like(a)
     apply_max = max_move is not None
-    i0 = 0; ai0 = a[i0]
-    for i in range(a.shape[0]):
-        if np.isnan(a[i]):
-            res[i] = np.nan
-        else:
-            if apply_max and max_move[i] > 0 and not np.isnan(res[i0]):
-                ai = max(min(res[i0] * max_move[i], a[i]), -res[i0] * max_move[i])
+    i0 = 0; ai0 = ai0_ = a[i0]
+    if apply_max:
+        t2_ = vol = 0
+        for i in range(a.shape[0]):
+            if np.isnan(a[i]):
+                res[i] = np.nan
+            else:
+                if max_move[i] > 0 and vol > 0:
+                    ai = max(min(vol * max_move[i], a[i]), -vol * max_move[i])
+                else:
+                    ai = a[i]                
+                if exc_zero and ai == 0:
+                    res[i] = res[i0]
+                elif time[i] == t:
+                    t0 = t0 + v[i] - v[i0]
+                    t2 = t2 + v[i] * ai**2 - v[i0] * ai0**2
+                    t2_ = t2_ + v[i] * a[i]**2 - v[i0] * ai0_**2
+                else:
+                    p = w if np.isnan(time[i]) else w**(time[i]-t)
+                    t0 = t0 * p + v[i]
+                    t2 = t2 * p + v[i] * ai**2
+                    t2_ = t2_ * p + v[i] * a[i]**2 
+                    t = time[i]
+                i0 = i; ai0 = ai; ai0_ = a[i]
+                res[i] = np.nan if t0 == 0 else np.sqrt(t2/t0)
+                vol = np.nan if t0 == 0 else np.sqrt(t2_/t0)
+    else:
+        for i in range(a.shape[0]):
+            if np.isnan(a[i]):
+                res[i] = np.nan
             else:
                 ai = a[i]                
-            if exc_zero and ai == 0:
-                res[i] = res[i0]
-            elif time[i] == t:
-                t0 = t0 + v[i] - v[i0]
-                t2 = t2 + v[i] * ai**2 - v[i0] * ai0**2
-            else:
-                p = w if np.isnan(time[i]) else w**(time[i]-t)
-                t0 = t0 * p + v[i]
-                t2 = t2 * p + v[i] * ai**2
-                t = time[i]
-            i0 = i; ai0 = ai
-            res[i] = np.nan if t0 == 0 else np.sqrt(t2/t0)
+                if exc_zero and ai == 0:
+                    res[i] = res[i0]
+                elif time[i] == t:
+                    t0 = t0 + v[i] - v[i0]
+                    t2 = t2 + v[i] * ai**2 - v[i0] * ai0**2
+                else:
+                    p = w if np.isnan(time[i]) else w**(time[i]-t)
+                    t0 = t0 * p + v[i]
+                    t2 = t2 * p + v[i] * ai**2
+                    t = time[i]
+                i0 = i; ai0 = ai
+                res[i] = np.nan if t0 == 0 else np.sqrt(t2/t0)        
     return res, t, t0, t2
 
 
@@ -83,31 +106,63 @@ def _ewmstd(a, n, time, wgt, t = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sam
     v = (1-w)*wgt
     res = np.empty_like(a)
     apply_max = max_move is not None
-    i0 = 0; ai0 = a[i0]; n0 = 0
-    for i in range(a.shape[0]):
-        if np.isnan(a[i]):
-            res[i] = np.nan
-        else:
-            if apply_max and max_move[i]>0 and not np.isnan(res[i0]):
-                ai = max(min(res[i0] * max_move[i], a[i]), -res[i0] * max_move[i])
+    i0 = 0; ai0 = ai0_ = a[i0]; n0 = 0
+    if apply_max:
+        t2_ = t1_ = vol = 0
+        for i in range(a.shape[0]):
+            if np.isnan(a[i]):
+                res[i] = np.nan
             else:
-                ai = a[i]                
-            if exc_zero and ai == 0:
-                res[i] = res[i0]
-            elif time[i] == t:
-                t0 = t0 + v[i] - v[i0]
-                t1 = t1 + v[i] * ai - v[i0] * ai0
-                t2 = t2 + v[i] * ai**2 - v[i0] * ai0**2
+                if max_move[i]>0 and vol > 0:
+                    ai = max(min(res[i0] * max_move[i], a[i]), -res[i0] * max_move[i])
+                else:
+                    ai = a[i]                
+                if exc_zero and ai == 0:
+                    res[i] = res[i0]
+                elif time[i] == t:
+                    t0 = t0 + v[i] - v[i0]
+                    t1 = t1 + v[i] * ai - v[i0] * ai0
+                    t2 = t2 + v[i] * ai**2 - v[i0] * ai0**2
+                    t1_ = t1_ + v[i] * a[i] - v[i0] * ai0_
+                    t2_ = t2_ + v[i] * a[i]**2 - v[i0] * ai0_**2
+                else:
+                    p = w if np.isnan(time[i]-t) else w**(time[i]-t)
+                    n0 = n0 * p + (1-w)
+                    t0 = t0 * p + v[i]
+                    w2 = w2 * p**2 + v[i]**2
+                    t1 = t1 * p + v[i] * ai
+                    t2 = t2 * p + v[i] * ai**2
+                    t1_ = t1_ * p + v[i] * a[i]
+                    t2_ = t2_ * p + v[i] * a[i]**2
+                    t = time[i]
+                i0 = i; ai0 = ai; ai0_ = a[i]
+                res[i] = np.nan if n0 < min_sample else calculator(t0, t1, t2, w2 = w2, bias = bias)
+                vol = np.nan if n0 < min_sample else calculator(t0, t1_, t2_, w2 = w2, bias = bias)
+    else:
+        for i in range(a.shape[0]):
+            if np.isnan(a[i]):
+                res[i] = np.nan
             else:
-                p = w if np.isnan(time[i]-t) else w**(time[i]-t)
-                n0 = n0 * p + (1-w)
-                t0 = t0 * p + v[i]
-                w2 = w2 * p**2 + v[i]**2
-                t1 = t1 * p + v[i] * ai
-                t2 = t2 * p + v[i] * ai**2
-                t = time[i]
-            i0 = i; ai0 = ai
-            res[i] = np.nan if n0 < min_sample else calculator(t0, t1, t2, w2 = w2, bias = bias)
+                if max_move[i]>0 and vol > 0:
+                    ai = max(min(res[i0] * max_move[i], a[i]), -res[i0] * max_move[i])
+                else:
+                    ai = a[i]                
+                if exc_zero and ai == 0:
+                    res[i] = res[i0]
+                elif time[i] == t:
+                    t0 = t0 + v[i] - v[i0]
+                    t1 = t1 + v[i] * ai - v[i0] * ai0
+                    t2 = t2 + v[i] * ai**2 - v[i0] * ai0**2
+                else:
+                    p = w if np.isnan(time[i]-t) else w**(time[i]-t)
+                    n0 = n0 * p + (1-w)
+                    t0 = t0 * p + v[i]
+                    w2 = w2 * p**2 + v[i]**2
+                    t1 = t1 * p + v[i] * ai
+                    t2 = t2 * p + v[i] * ai**2
+                    t = time[i]
+                i0 = i; ai0 = ai
+                res[i] = np.nan if n0 < min_sample else calculator(t0, t1, t2, w2 = w2, bias = bias)
     return res, t, t0, t1, t2, w2
 
 

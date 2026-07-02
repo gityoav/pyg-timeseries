@@ -116,3 +116,26 @@ def test_ewm_empty():
         for f in [ewma, ewmstd, ewmrms, ewmskew]:
             res = f(a, 20)
             assert eq(res, a)
+
+
+
+def test_ewmrms_max_move_uses_unrestricted_vol():
+    a = np.array([0.1]*100 + [1]*100)
+    base = ewmrms(a, 3)
+    res = ewmrms(a, 3, max_move = 1)
+    res[101:110] - res[100:109]
+    assert round(res[100],5) == 0.1    
+    assert res[101] - res[100] > 0.1 * 1 ## The unrestricted volatility changed by more than 
+    assert (res[101] - res[100])/base[101] < 0.33
+    assert (res[101] - res[100])/base[101] > 0.2
+
+
+def test_ewmrms_max_move():
+    a = np.array([1,2,3,4,5,10,17,18,9,10])
+    res0 = ewmrms(a, 3)
+    res1 = ewmrms(a, 3, max_move = 1)
+    res1arr = ewmrms(a, 3, max_move = [1]*10)
+    assert eq(res1, res1arr)
+    assert np.all(res0>=res1)
+    res12 = ewmrms(a, 3, max_move = [1,1,1,1,1,2,2,2,2,2])
+    assert np.all(res12[5:]>res1[5:])
