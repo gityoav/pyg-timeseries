@@ -20,9 +20,9 @@ def test_ewm_with_weights():
         base = func(a, 10)        
         res = func(a, 10, wgt = 1/abs(a))
         assert abs((res-base)/(res+base).iloc[-500:]).max() < 0.1
-        
+        lots_of_nans = func(a, 10, min_periods = 100)
+        assert lots_of_nans.iloc[:99].sum() == 0   
 
-    
 
 def test_ewm_monthly():    
     months = drange('-500m', t, '1m')

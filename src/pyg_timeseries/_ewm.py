@@ -1735,10 +1735,9 @@ def _to_pandas(res, a, b):
             res = pd.Series(res, index = b.index)
     return res
 
-### WORK TO DO
 
 def ewmx_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, 
-             overlapping = 1, join = 'outer', method = None, calculation = cor_calculation_ewm, is_returns = False, dim = None, dtype = None, ffill = True):
+             overlapping = 1, join = 'outer', method = None, calculation = cor_calculation_ewm, is_returns = False, dim = None, dtype = None, ffill = True, min_periods = 0):
     """
     Equivalent to ewmxcor but returns a state parameter for instantiation of later calculations.
     See ewmxcor documentation for more details
@@ -1757,31 +1756,31 @@ def ewmx_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, ins
         wgt = np.full(a.shape[0], 1)
     a_ = a.values if is_pd(a) else a
     b_ = b.values if is_pd(b) else b
-    res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t = _ewmxt(a = a_, b = b_, n = n, 
+    res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t, n1 = _ewmxt(a = a_, b = b_, n = n, 
                                                                  wgt = wgt, time = time,
                                                                  min_sample=min_sample, 
                                                                  bias = bias, 
                                                                  overlapping = overlapping, 
                                                                  calculation = calculation,
-                                                                 dim = dim, dtype = dtype, ffill = ffill,
+                                                                 dim = dim, dtype = dtype, min_periods = min_periods, ffill = ffill,
                                                                  **state)
 
-    state = dictattr(a1=a1, a2=a2, b1 = b1, b2 = b2, ab=ab, prev_a = prev_a, prev_b = prev_b, w1 = w1, w2 = w2, n0 = n0, t = t)
+    state = dictattr(a1=a1, a2=a2, b1 = b1, b2 = b2, ab=ab, prev_a = prev_a, prev_b = prev_b, w1 = w1, w2 = w2, n0 = n0, t = t, n1 = n1)
     res = _to_pandas(res, a, b)
     return dictattr(data = res, state = state)
 
 
 def ewmxcor_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, overlapping = 1, 
-             join = 'outer', method = None, is_returns = False, dtype = None, ffill = True):
+             join = 'outer', method = None, is_returns = False, dtype = None, ffill = True, min_periods = 0):
 
     return ewmx_(a, b, n, time = time, min_sample = min_sample, bias = bias, data = data, instate = instate, wgt = wgt, 
-                 overlapping = overlapping, join = join, method = method, calculation = cor_calculation_ewm, is_returns=is_returns, dtype = dtype, ffill = ffill)
+                 overlapping = overlapping, join = join, method = method, calculation = cor_calculation_ewm, is_returns=is_returns, dtype = dtype, ffill = ffill, min_periods = min_periods)
 
 ewmxcor_.output = ['data', 'state']
 
 
 def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, 
-            wgt = None, overlapping = 1, is_returns = False, dtype = None, ffill = True):
+            wgt = None, overlapping = 1, is_returns = False, dtype = None, ffill = True, min_periods = 0):
     """
     calculates pair-wise correlation between a and b returns, assuming a and b are TOTAL returns
     
@@ -1838,7 +1837,7 @@ def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None,
     ----------------------    
     """
     return ewmxcor_(a = a, b = b, n = n, min_sample = min_sample, bias = bias, data = data, 
-                    instate = state, wgt = wgt, overlapping = overlapping, is_returns = is_returns, dtype = dtype, ffill = ffill).get('data')
+                    instate = state, wgt = wgt, overlapping = overlapping, is_returns = is_returns, dtype = dtype, ffill = ffill, min_periods = min_periods).get('data')
 
 
 
@@ -1950,7 +1949,7 @@ def ewmGLM(a, b, n, overlapping = 1, AAi = None, min_sample = 0.25, data = None,
 
 
 
-def ewmxLR_(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = None, m = None, instate = None, wgt = None, is_returns = False, dtype = None, ffill = True):
+def ewmxLR_(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = None, m = None, instate = None, wgt = None, is_returns = False, dtype = None, ffill = True, min_periods = 0):
     """
     Calculates a Linear regression of a versus b
     
@@ -1976,13 +1975,13 @@ def ewmxLR_(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = 
     """
     res = ewmx_(a = a, b = b, n = n, time = time, 
                 min_sample = min_sample, bias = bias, instate = instate, 
-                wgt = wgt, calculation = LR_calculation_ewm, is_returns = is_returns, dtype=dtype, ffill = ffill)
+                wgt = wgt, calculation = LR_calculation_ewm, is_returns = is_returns, dtype=dtype, ffill = ffill, min_periods = min_periods)
     c, m = res['data']    
     return dictattr(c = c, m = m, state = res['state'])
 
 ewmxLR_.output = ['c', 'm', 'state']
 
-def ewmxLR(a, b, n, time = None, min_sample = 0.25, bias = True, state = None, wgt = None, is_returns = False, dtype = None, ffill = True):
+def ewmxLR(a, b, n, time = None, min_sample = 0.25, bias = True, state = None, wgt = None, is_returns = False, dtype = None, ffill = True, min_periods = 0):
     """
     calculates pair-wise linear regression between changes in a and b.
     
@@ -2059,23 +2058,23 @@ def ewmxLR(a, b, n, time = None, min_sample = 0.25, bias = True, state = None, w
     """
     res = ewmx_(a = a, b = b, n = n, time = time, 
                 min_sample = min_sample, bias = bias, instate = state, 
-                wgt = wgt, calculation = LR_calculation_ewm, is_returns = is_returns, dtype=dtype, ffill = ffill)
+                wgt = wgt, calculation = LR_calculation_ewm, is_returns = is_returns, dtype=dtype, ffill = ffill, min_periods = min_periods)
     c, m = res['data']
     return dictattr(c = c, m = m)
 
 ewmxLR.output = ['c', 'm']
 
-def ewmskew_(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = None, instate = None, wgt = None):
+def ewmskew_(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = None, instate = None, wgt = None, min_periods = 0):
     """
     Equivalent to ewmskew but returns a state parameter for instantiation of later calculations.
     See ewmskew documentation for more details
     """
     state = instate or {}
-    return _data_state(['data', 't', 't0', 't1', 't2', 't3'],_ewmskewt(a, n=n, wgt = wgt, time = time, bias = bias, min_sample = min_sample, axis = axis, **state))
+    return _data_state(['data', 't', 't0', 't1', 't2', 't3', 'n1'], _ewmskewt(a, n=n, wgt = wgt, time = time, bias = bias, min_sample = min_sample, axis = axis, min_periods = min_periods, **state))
 
 ewmskew_.output = ['data', 'state']
 
-def ewmskew(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = None, state = None, wgt = None):
+def ewmskew(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = None, state = None, wgt = None, min_periods = 0):
     """
     Equivalent to a.ewm(n).skew() but with...
     - supports np.ndarrays as well as timeseries
@@ -2158,5 +2157,5 @@ def ewmskew(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = N
     
     """
     state = state or {}
-    return first_(_ewmskewt(a, n, time = time, bias = bias, min_sample=min_sample, axis=axis, wgt = wgt, **state))
+    return first_(_ewmskewt(a, n, time = time, bias = bias, min_sample=min_sample, axis=axis, wgt = wgt, min_periods = min_periods, **state))
 
