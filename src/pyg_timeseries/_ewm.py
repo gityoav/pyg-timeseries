@@ -1516,6 +1516,7 @@ def ewmstd_(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = Non
     return _data_state(['data', 't', 't0', 't1', 't2', 'w2', 'n1', 'n0'],
                        _ewmstdt(a, n = n, wgt = wgt, 
                                 time = time, min_sample=min_sample, 
+                                bias = bias,
                                 axis=axis, 
                                 exc_zero = exc_zero, 
                                 max_move = max_move, 
@@ -1638,7 +1639,13 @@ def ewmvar_(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = 
     See ewmvar documentation for more details
     """
     state = instate or {}
-    return _data_state(['data', 't', 't0', 't1', 't2', 'w2', 'n1', 'n0'],_ewmstdt(a, n = n, wgt = wgt, time = time, min_sample=min_sample, axis=axis, exc_zero = exc_zero, max_move = max_move, calculator = variance_calculation_ewm, min_periods = min_periods, **state))
+    return _data_state(['data', 't', 't0', 't1', 't2', 'w2', 'n1', 'n0'],_ewmstdt(a, n = n, wgt = wgt, time = time, 
+                                                                                  min_sample=min_sample, 
+                                                                                  axis=axis, exc_zero = exc_zero, 
+                                                                                  max_move = max_move, 
+                                                                                  bias = bias,
+                                                                                  calculator = variance_calculation_ewm, 
+                                                                                  min_periods = min_periods, **state))
 
 def ewmvar(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = False, data = None, state = None, max_move = None, wgt = None, min_periods =3):
     """
