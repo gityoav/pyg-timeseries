@@ -1084,13 +1084,13 @@ def _ewmGLM(a, b, n, wgt, time, t = np.nan, t0 = 0, a2 = None, ab = None, min_sa
 
 @pd2np
 @compiled
-def _ewmskew(a, n, time, wgt, bias = 0, t = np.nan, t0 = 0, t1 = 0, t2 = 0, t3 = 0, min_sample = 0.25, min_periods = 4, n1 = 0):
+def _ewmskew(a, n, time, wgt, bias = 0, t = np.nan, t0 = 0, t1 = 0, t2 = 0, t3 = 0, min_sample = 0.25, min_periods = 4, n1 = 0, n0 = 0):
     w = _w(n)
     v = (1-w) * wgt
     days = n if n>1 else w/(1-w)
     d = 1 + days
     res = np.empty_like(a)
-    i0 = 0; n0 = 0
+    i0 = 0
     for i in range(a.shape[0]):
         if np.isnan(a[i]):
             res[i] = np.nan
@@ -1112,7 +1112,7 @@ def _ewmskew(a, n, time, wgt, bias = 0, t = np.nan, t0 = 0, t1 = 0, t2 = 0, t3 =
                 t = time[i]
             i0 = i
             res[i] = np.nan if n0 < min_sample or n1<min_periods else skew_calculation(t0 * d, t1 * d, t2 * d, t3 * d, bias = bias)
-    return res, t, t0, t1, t2, t3, n1
+    return res, t, t0, t1, t2, t3, n1, n0
 
 ##### clock management functions  ############################################
 def _wgt(a, wgt = None, beta = None):
@@ -1269,11 +1269,11 @@ def _ewmGLM1dt(a, b, n, AAi = None, overlapping = 1, wgt = None, n0 = 0, t0 = 0,
     return data, t0, n0, ab, prev_a, prev_b, at0, an0, a2, prev
 
 @loop_all
-def _ewmskewt(a, n, wgt = None, time = None, t = None, bias = False, t0 = 0, t1 = 0, t2 = 0, t3 = 0, min_sample = 0.25, min_periods = 4, n1 = 0):
+def _ewmskewt(a, n, wgt = None, time = None, t = None, bias = False, t0 = 0, t1 = 0, t2 = 0, t3 = 0, min_sample = 0.25, min_periods = 4, n1 = 0, n0 = 0):
     time = clock(a, time, t)
     wgt = _wgt(a, wgt)
     t = 0 if t is None or np.isnan(t) else t
-    return _ewmskew(a, n=n, wgt = wgt, time = time, bias = int(bias), t = t, t0 = t0, t1 = t1, t2 = t2, t3 = t3, min_sample=min_sample, min_periods = min_periods, n1 = n1)    
+    return _ewmskew(a, n=n, wgt = wgt, time = time, bias = int(bias), t = t, t0 = t0, t1 = t1, t2 = t2, t3 = t3, min_sample=min_sample, min_periods = min_periods, n1 = n1, n0 = n0)    
 
 
 #####   exposed API functions ############################################
@@ -1638,7 +1638,7 @@ def ewmvar_(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = 
     See ewmvar documentation for more details
     """
     state = instate or {}
-    return _data_state(['data', 't', 't0', 't1', 't2', 'w2', 'n1'],_ewmstdt(a, n = n, wgt = wgt, time = time, min_sample=min_sample, axis=axis, exc_zero = exc_zero, max_move = max_move, calculator = variance_calculation_ewm, min_periods = min_periods, **state))
+    return _data_state(['data', 't', 't0', 't1', 't2', 'w2', 'n1', 'n0'],_ewmstdt(a, n = n, wgt = wgt, time = time, min_sample=min_sample, axis=axis, exc_zero = exc_zero, max_move = max_move, calculator = variance_calculation_ewm, min_periods = min_periods, **state))
 
 def ewmvar(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = False, data = None, state = None, max_move = None, wgt = None, min_periods =3):
     """
@@ -2085,7 +2085,7 @@ def ewmskew_(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = 
     See ewmskew documentation for more details
     """
     state = instate or {}
-    return _data_state(['data', 't', 't0', 't1', 't2', 't3', 'n1'], _ewmskewt(a, n=n, wgt = wgt, time = time, bias = bias, min_sample = min_sample, axis = axis, min_periods = min_periods, **state))
+    return _data_state(['data', 't', 't0', 't1', 't2', 't3', 'n1', 'n0'], _ewmskewt(a, n=n, wgt = wgt, time = time, bias = bias, min_sample = min_sample, axis = axis, min_periods = min_periods, **state))
 
 ewmskew_.output = ['data', 'state']
 

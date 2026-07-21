@@ -1,11 +1,19 @@
 from pyg_timeseries import ewma, ewmstd, ewmrms, ewmskew, ewmxLR, cumsum
-from pyg_timeseries import ewmxcor, ewmcorr, ts_max, ewmcorrelation, ewmcovar, ewmcovariance
+from pyg_timeseries import ewmxcor, ewmcorr, ts_max, ewmcorrelation, ewmcovar, ewmcovariance, ewmstd_
 from pyg_base import eq, dt, calendar, drange, Dict, is_pd, is_df, is_series
 import pandas as pd; import numpy as np
 
 t = dt(2021,3,1)
 cal = calendar('US')
 
+
+def test_that_ewmstd_persists_n0():
+    a = np.random.normal(0,1,1000)
+    res = ewmstd_(a, 100)
+    assert 'n0' in res['state']
+    b = np.random.normal(0,1,2)
+    c = ewmstd(b, 10, state = res['state'])
+    assert c[0]>0.1
 
 
 def test_ewm_with_weights():
