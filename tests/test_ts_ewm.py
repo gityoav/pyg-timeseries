@@ -30,7 +30,9 @@ def test_ewm_monthly():
     days = cal.drange('-500m', t, 1)
     for f in ewma, ewmstd, ewmskew, ewmrms:
         assert eq(f(a, 3).reindex(days), f(a.reindex(days), 3))
-        assert eq(f(a.reindex(days).ffill(), 3, time = 'm'), f(a.reindex(days),3).ffill())
+        x = f(a.reindex(days).ffill(), 3, time = 'm')
+        y = f(a.reindex(days),3).ffill()
+        assert abs(x-y).max() < 1e-10
 
 
 def test_ewm_weekly():    

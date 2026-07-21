@@ -102,7 +102,12 @@ def _ewmrms(a, n, time, wgt, t = np.nan, t0 = 0., t2 = 0., exc_zero = False, max
 
 @pd2np
 @compiled
-def _ewmstd(a, n, time, wgt, t = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = 0.25, bias = False, exc_zero = False, max_move = None, calculator = stdev_calculation_ewm, min_periods = 0, n1 = 0):
+def _ewmstd(a, n, time, wgt, t = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = 0.25, bias = False, exc_zero = False, max_move = None, calculator = stdev_calculation_ewm, min_periods = 0, n1 = 3):
+    """
+    t = np.nan; t0 = 0; t1 = 0; t2 = 0; w2 = 0; min_sample = 0.25; bias = False; 
+    exc_zero = False; max_move = None; calculator = stdev_calculation_ewm; 
+    min_periods = 0; n1 = 0
+    """
     if n == 1:
         return np.full_like(a, 0.0), t, t0, t1, t2, w2, n1
     w = _w(n)
@@ -110,6 +115,8 @@ def _ewmstd(a, n, time, wgt, t = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sam
     res = np.empty_like(a)
     apply_max = max_move is not None
     i0 = 0; ai0 = ai0_ = a[i0]; n0 = 0
+    if time is None:
+        time = np.full(a.shape, np.nan)
     if apply_max:
         t2_ = t1_ = vol = 0
         for i in range(a.shape[0]):
@@ -147,10 +154,7 @@ def _ewmstd(a, n, time, wgt, t = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sam
             if np.isnan(a[i]):
                 res[i] = np.nan
             else:
-                if max_move[i]>0 and vol > 0:
-                    ai = max(min(res[i0] * max_move[i], a[i]), -res[i0] * max_move[i])
-                else:
-                    ai = a[i]                
+                ai = a[i]                
                 if exc_zero and ai == 0:
                     res[i] = res[i0]
                 elif time[i] == t:
@@ -1080,7 +1084,7 @@ def _ewmGLM(a, b, n, wgt, time, t = np.nan, t0 = 0, a2 = None, ab = None, min_sa
 
 @pd2np
 @compiled
-def _ewmskew(a, n, time, wgt, bias = 0, t = np.nan, t0 = 0, t1 = 0, t2 = 0, t3 = 0, min_sample = 0.25, min_periods = 0, n1 = 0):
+def _ewmskew(a, n, time, wgt, bias = 0, t = np.nan, t0 = 0, t1 = 0, t2 = 0, t3 = 0, min_sample = 0.25, min_periods = 4, n1 = 0):
     w = _w(n)
     v = (1-w) * wgt
     days = n if n>1 else w/(1-w)
@@ -1134,23 +1138,22 @@ def _ewmrmst(a, n, wgt = None, time = None, t = None, t0 = 0, t2 = 0, exc_zero =
     time = clock(a, time, t)
     wgt = _wgt(a, wgt)
     t = 0 if t is None or np.isnan(t) else t
-    if max_move is None:
-        max_move = np.inf
     if is_num(max_move):
         max_move = np.full_like(a, max_move) if max_move>0 else None
     return _ewmrms(a, n=n, wgt = wgt, time = time, t = t, t0 = t0, t2 = t2, exc_zero = exc_zero, max_move = max_move, min_periods = min_periods, n1 = n1)
 
 @loop_all
-def _ewmstdt(a, n, wgt = None, time = None, t = None, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = 0.25, bias = False, exc_zero = False, max_move = None, calculator = stdev_calculation_ewm, min_periods = 0, n1 = 0):
+def _ewmstdt(a, n, wgt = None, time = None, t = None, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = 0.25, bias = False, exc_zero = False, max_move = None, calculator = stdev_calculation_ewm, min_periods = 0, n1 = 3):
+    """
+    wgt = None; time = None; t = None; t0 = 0; t1 = 0; t2 = 0; w2 = 0; min_sample = 0.25; bias = False; exc_zero = False; max_move = None; calculator = stdev_calculation_ewm; min_periods = 0; n1 = 0
+    """    
     time = clock(a, time, t)
     wgt = _wgt(a, wgt)
     t = 0 if t is None or np.isnan(t) else t
-    if max_move is None:
-        max_move = np.inf
     if is_num(max_move):
         max_move = np.full_like(a, max_move) if max_move>0 else None
-    return _ewmstd(a, n = n, wgt = wgt, time = time, t = t, t0 = t0, t1 = t1, t2 = t2, w2 = w2, min_sample=min_sample, bias = bias, calculator = calculator, exc_zero = exc_zero, max_move = max_move, min_periods = min_periods, n1 = n1)
-
+    res = _ewmstd(a, n = n, wgt = wgt, time = time, t = t, t0 = t0, t1 = t1, t2 = t2, w2 = w2, min_sample=min_sample, bias = bias, calculator = calculator, exc_zero = exc_zero, max_move = max_move, min_periods = min_periods, n1 = n1)
+    return res
 
 
 dims = {cor_calculation_ewm : 1, LR_calculation_ewm: 2}
@@ -1266,7 +1269,7 @@ def _ewmGLM1dt(a, b, n, AAi = None, overlapping = 1, wgt = None, n0 = 0, t0 = 0,
     return data, t0, n0, ab, prev_a, prev_b, at0, an0, a2, prev
 
 @loop_all
-def _ewmskewt(a, n, wgt = None, time = None, t = None, bias = False, t0 = 0, t1 = 0, t2 = 0, t3 = 0, min_sample = 0.25, min_periods = 0, n1 = 0):
+def _ewmskewt(a, n, wgt = None, time = None, t = None, bias = False, t0 = 0, t1 = 0, t2 = 0, t3 = 0, min_sample = 0.25, min_periods = 4, n1 = 0):
     time = clock(a, time, t)
     wgt = _wgt(a, wgt)
     t = 0 if t is None or np.isnan(t) else t
@@ -1504,17 +1507,24 @@ def ewmrms(a, n, time=None, axis=0, data = None, exc_zero = False, max_move = No
     state = state or {}
     return first_(_ewmrmst(a, n = n, wgt = wgt, time = time, axis=axis, exc_zero = exc_zero, max_move = max_move, min_periods=min_periods, **state))
 
-def ewmstd_(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, exc_zero = False, max_move = None, instate = None, wgt = None, min_periods=0):
+def ewmstd_(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, exc_zero = False, max_move = None, instate = None, wgt = None, min_periods=3):
     """
     Equivalent to ewmstd but returns a state parameter for instantiation of later calculations.
     See ewmstd documentation for more details
     """
     state = instate or {}
-    return _data_state(['data', 't', 't0', 't1', 't2', 'w2', 'n1'],_ewmstdt(a, n = n, wgt = wgt, time = time, min_sample=min_sample, axis=axis, exc_zero = exc_zero, max_move = max_move, calculator = stdev_calculation_ewm, min_periods = min_periods, **state))
+    return _data_state(['data', 't', 't0', 't1', 't2', 'w2', 'n1'],
+                       _ewmstdt(a, n = n, wgt = wgt, 
+                                time = time, min_sample=min_sample, 
+                                axis=axis, 
+                                exc_zero = exc_zero, 
+                                max_move = max_move, 
+                                calculator = stdev_calculation_ewm, 
+                                min_periods = min_periods, **state))
 
 ewmstd_.output = ['data', 'state']
 
-def ewmstd(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, exc_zero = False, max_move = None, state = None, wgt = None, min_periods = 0):
+def ewmstd(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, exc_zero = False, max_move = None, state = None, wgt = None, min_periods = 3):
     """
     ewmstd is equivalent to a.ewm(n).std() but with...
     - supports np.ndarrays as well as timeseries
@@ -1622,7 +1632,7 @@ def ewmstd(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None
     return first_(_ewmstdt(a, n = n, wgt = wgt, time = time, min_sample=min_sample, bias = bias, axis=axis, exc_zero = exc_zero, max_move = max_move,  calculator = stdev_calculation_ewm, min_periods = min_periods, **state))
 
 
-def ewmvar_(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = False, data = None, instate = None, max_move = None, wgt = None, min_periods=0):
+def ewmvar_(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = False, data = None, instate = None, max_move = None, wgt = None, min_periods=3):
     """
     Equivalent to ewmvar but returns a state parameter for instantiation of later calculations.
     See ewmvar documentation for more details
@@ -1630,7 +1640,7 @@ def ewmvar_(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = 
     state = instate or {}
     return _data_state(['data', 't', 't0', 't1', 't2', 'w2', 'n1'],_ewmstdt(a, n = n, wgt = wgt, time = time, min_sample=min_sample, axis=axis, exc_zero = exc_zero, max_move = max_move, calculator = variance_calculation_ewm, min_periods = min_periods, **state))
 
-def ewmvar(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = False, data = None, state = None, max_move = None, wgt = None, min_periods =0):
+def ewmvar(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = False, data = None, state = None, max_move = None, wgt = None, min_periods =3):
     """
     ewmstd is equivalent to a.ewm(n).var() but with...
     - supports np.ndarrays as well as timeseries
@@ -2069,7 +2079,7 @@ def ewmxLR(a, b, n, time = None, min_sample = 0.25, bias = True, state = None, w
 
 ewmxLR.output = ['c', 'm']
 
-def ewmskew_(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = None, instate = None, wgt = None, min_periods = 0):
+def ewmskew_(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = None, instate = None, wgt = None, min_periods = 4):
     """
     Equivalent to ewmskew but returns a state parameter for instantiation of later calculations.
     See ewmskew documentation for more details
@@ -2079,7 +2089,7 @@ def ewmskew_(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = 
 
 ewmskew_.output = ['data', 'state']
 
-def ewmskew(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = None, state = None, wgt = None, min_periods = 0):
+def ewmskew(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = None, state = None, wgt = None, min_periods = 4):
     """
     Equivalent to a.ewm(n).skew() but with...
     - supports np.ndarrays as well as timeseries
