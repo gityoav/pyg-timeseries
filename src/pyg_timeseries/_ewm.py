@@ -180,7 +180,6 @@ def _prev(prev, shape):
         return prev
 
 
-
 @compiled
 def _ewmx(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
           a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, 
@@ -255,7 +254,7 @@ def _ewmx(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
                             w1[j,k] = w1[j,k] * p + vi
                             w2[j,k] = w2[j,k] * p**2 + vi**2        
                             n0[j,k] = n0[j,k] * p + (1-w)
-                            n1[j,k] += 1
+                            n1[j,k] = n1[j,k] + 1
                             a1[j,k] = a1[j,k] * p + vi * dx
                             b1[j,k] = b1[j,k] * p + vi * dy
                             a2[j,k] = a2[j,k] * p + vi * dx ** 2        
@@ -321,7 +320,7 @@ def _ewmx2(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
     w1 = np.zeros((x,y)) if w1 is None else w1
     w2 = np.zeros((x,y)) if w2 is None else w2
     n0 = np.zeros((x,y)) if n0 is None else n0
-    n1 = np.zeros((x,y)) if n0 is None else n1
+    n1 = np.zeros((x,y)) if n1 is None else n1
     for j in range(x):
         for k in range(y):
             for i in range(a.shape[0]):
@@ -356,7 +355,7 @@ def _ewmx2(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
                             w1[j,k] = w1[j,k] * p + vi
                             w2[j,k] = w2[j,k] * p**2 + vi**2        
                             n0[j,k] = n0[j,k] * p + (1-w)
-                            n1[j,k] += 1
+                            n1[j,k] = n1[j,k] + 1
                             a1[j,k] = a1[j,k] * p + vi * dx
                             b1[j,k] = b1[j,k] * p + vi * dy
                             a2[j,k] = a2[j,k] * p + vi * dx ** 2        
@@ -1175,7 +1174,7 @@ def _reshape(res, reshape_a, reshape_b):
 def _ewmxt(a, b, n, wgt = None, time = None, t = None, a1 = None, a2 = None, b1 = None, b2 = None, 
               ab = None, w1 = None, w2 = None, n0 = None, prev_a = None, prev_b = None, 
               min_sample = 0.25, bias = False, overlapping = 1, 
-              calculation = cor_calculation_ewm, dim = None, dtype = None, ffill = True, min_periods=0, n1 = 0):
+              calculation = cor_calculation_ewm, dim = None, dtype = None, ffill = True, min_periods=0, n1 = None):
     """
     a1 = None; a2 = None; b1 = None; b2 = None; ab = None; w1 = None; w2 = None; n0 = None; min_sample = 0.25; bias = False
     wgt = time = t = dim = None
@@ -1742,7 +1741,13 @@ def ewmx_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, ins
     Equivalent to ewmxcor but returns a state parameter for instantiation of later calculations.
     See ewmxcor documentation for more details
     
-    res = ewmx_(a,b,20)
+    >>> a = np.random.normal(0,1,(1000,10))
+    >>> b = np.random.normal(0,1,(1000,10))    
+    >>> n = 20; time = None; min_sample = 0.25; bias = True; data = None; instate = None; wgt = None; 
+    >>> overlapping = 1; join = 'outer'; method = None; calculation = cor_calculation_ewm; is_returns = False; 
+    >>> dim = None; dtype = None; ffill = True; min_periods = 0
+    >>> res = ewmx_(a,b,20)
+
     res['data']
     res['state']    
     """
