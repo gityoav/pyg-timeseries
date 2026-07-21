@@ -35,6 +35,8 @@ def stdev_calculation_ewm(t0, t1, t2, w2, bias = False):
     The nicest calculation of unbiased variance under variable weights is available here:
     https://mathoverflow.net/questions/11803/unbiased-estimate-of-the-variance-of-a-weighted-mean
     """
+    if t0<=0:
+        return np.nan
     variance = t2/t0 - (t1/t0)**2
     if variance<0:
         return np.nan
@@ -42,7 +44,7 @@ def stdev_calculation_ewm(t0, t1, t2, w2, bias = False):
         return np.sqrt(variance)
     else:
         r = 1 - w2/(t0**2)
-        return np.sqrt(variance/r)
+        return np.sqrt(variance/r) if r > 0 else np.nan
 
 @compiled
 def variance_calculation_ewm(t0, t1, t2, w2, bias = False):
@@ -52,6 +54,8 @@ def variance_calculation_ewm(t0, t1, t2, w2, bias = False):
     
     w2 = E(weights^2)
     """
+    if t0<=0:
+        return np.nan
     variance = t2/t0 - (t1/t0)**2
     if variance<0:
         return np.nan
@@ -59,11 +63,13 @@ def variance_calculation_ewm(t0, t1, t2, w2, bias = False):
         return variance
     else:
         r = 1 - w2/(t0**2)
-        return variance/r
+        return variance/r if r > 0 else np.nan
 
 
 @compiled
 def cor_calculation(t0, a1, a2, b1, b2, ab):
+    if t0 <= 0:
+        return np.nan
     Eab = ab/t0
     Ea = a1/t0
     Eb = b1/t0
