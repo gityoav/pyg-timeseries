@@ -15,11 +15,12 @@ def _cast_strided_result(a, va, res):
     """
     casts the values from res, to the last values of a that are not nan
     """
-    mask = ~np.isnan(a)
-    msk = mask[mask]
-    msk[:-len(res)] = False
-    mask[mask] = msk
-    va[mask] = res
+    if len(res):
+        mask = ~np.isnan(a)
+        msk = mask[mask]
+        msk[:-len(res)] = False
+        mask[mask] = msk
+        va[mask] = res
     return va
 
 @loop_all
@@ -41,15 +42,21 @@ def _rolling_quantile(a, n, quantile, vec = None, min_periods = None):
     mask = ~np.isnan(a_)
     na = a_[mask]
     quantile = np.array(quantile)
-    va = np.empty_like(a_) if len(quantile.shape) == 0 else np.empty([a_.shape[0], quantile.shape[0]])
-    strided = _as_strided(na, abs(n), 1)
-    res = np.quantile(strided, quantile, axis = 1).T
-    n_ = min(n, len(res))-1
-    if min_periods is not None and min_periods > n:
-        res[:min_periods-n] = np.nan
-    elif min_periods is not None and n_ > min_periods:
-        initial = np.array([np.quantile(na[:i+1], quantile) for i in range(min_periods, n_)]) 
-        res = np.concatenate([initial, res])        
+    va = np.full_like(a_, np.nan) if len(quantile.shape) == 0 else np.full([a_.shape[0], quantile.shape[0]], np.nan)
+    if abs(n) <= len(na):
+        strided = _as_strided(na, abs(n), 1)
+        res = np.quantile(strided, quantile, axis = 1).T
+    else:
+        res = np.array([])
+    
+    if min_periods is not None:
+        min_periods = max(min_periods, 1)
+        if min_periods > n:
+            res[:min_periods-n] = np.nan
+        n_ = max(0, 1 + len(na) - len(res) - min_periods)
+        if n_ > 0:
+            initial = np.array([np.quantile(na[:i], quantile) for i in range(min_periods + 1, min_periods + n_ + 1)])
+            res = np.concatenate([initial, res])
     rtn = _cast_strided_result(a, va, res)
     if len(vec):
         rtn = rtn[-len(a):]
