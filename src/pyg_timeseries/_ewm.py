@@ -17,8 +17,6 @@ import numba
 @pd2np
 @compiled
 def _ewma(a, n, time, wgt, t = np.nan, t0 = 0, t1 = 0, min_periods = 0, n1=0):
-    if n == 1:
-        return a, t, t0, t1, n1
     w = _w(n)
     v = (1-w) * wgt
     res = np.empty_like(a)
@@ -44,8 +42,6 @@ def _ewma(a, n, time, wgt, t = np.nan, t0 = 0, t1 = 0, min_periods = 0, n1=0):
 @pd2np
 @compiled
 def _ewmrms(a, n, time, wgt, t = np.nan, t0 = 0., t2 = 0., exc_zero = False, max_move = None, min_periods = 0, n1=0):
-    if n == 1:
-        return a, t, t0, t2, n1
     w = _w(n)
     v = (1-w) * wgt
     res = np.empty_like(a)
@@ -108,8 +104,6 @@ def _ewmstd(a, n, time, wgt, t = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sam
     exc_zero = False; max_move = None; calculator = stdev_calculation_ewm; 
     min_periods = 0; n1 = 0
     """
-    if n == 1:
-        return np.full_like(a, 0.0), t, t0, t1, t2, w2, n1, n0
     w = _w(n)
     v = (1-w)*wgt
     res = np.empty_like(a)
@@ -206,8 +200,6 @@ def _ewmx(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
     x = a.shape[1]
     y = b.shape[1]
     res0 = np.full((a.shape[0], x, y), NAN, dtype = dtype)
-    if n == 1:
-       return (res0,), a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t, n1
     p = w = _w(n)
     v = (1 - w) * wgt
     vi = px = py = dx = dy = np.nan
@@ -308,8 +300,6 @@ def _ewmx2(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
     y = b.shape[1]
     res0 = np.full((a.shape[0], x, y), NAN, dtype = dtype)    
     res1 = np.full((a.shape[0], x, y), NAN, dtype = dtype)    
-    if n == 1:
-       return (res0,res1), a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t, n1
     p = w = _w(n)
     v = (1 - w) * wgt
     vi = px = py = dx = dy = np.nan
@@ -408,8 +398,6 @@ def _ewmcorrelation(a, n, wgt, dtype, NAN = np.nan, ONE = 1.0, a0 = None, a1 = N
 
     m = a.shape[1]
     res = np.full((a.shape[0], m, m), NAN, dtype = dtype)
-    if n == 1:
-        return res, a0, a1, a2, aa, prev, w2, n0, n1
     p = w = _w(n)
     v = (1 - w) * wgt    
     a0 = np.zeros((m,m)) if a0 is None else a0
@@ -481,8 +469,6 @@ def _ewmcovariance(a, n, wgt, dtype, NAN = np.nan, ONE = 1.0, a0 = None, a1 = No
     """
     m = a.shape[1]
     res = np.full((a.shape[0], m, m), np.nan, dtype = dtype)
-    if n == 1:
-        return res, a0, a1, aa, prev, n0, n1
     p = w = _w(n)
     v = (1 - w) * wgt
     a0 = np.zeros((m,m)) if a0 is None else a0
@@ -1551,7 +1537,12 @@ def ewmstd(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None
     data: None.
         unused at the moment. Allow code such as func(live, **func_(history)) to work
     state: dict, optional
-        state parameters used to instantiate the internal calculations, based on history prior to 'a' provided. 
+        state parameters used to instantiate the internal calculations, based on history prior to 'a' provided.
+        
+    :Example:
+    ---------
+    >>> a = pd.Series(np.random.normal(0,1,1000), drange(-999))
+    >>> ewmstd(a,2)
     
     :Example: matching pandas
     -------------------------

@@ -4,7 +4,7 @@ from pyg_timeseries._decorators import compiled
 
 @compiled
 def _w(n):
-    if n > 1:
+    if n >= 1:
         return n/(n+1)
     elif n < 1:
         return 1. * n
