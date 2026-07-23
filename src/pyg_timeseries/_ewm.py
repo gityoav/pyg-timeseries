@@ -13,6 +13,15 @@ import numba
 ##
 ###########################################
 
+@compiled
+def _min_sample_periods(min_sample, min_periods, default_min_periods = None):
+    if min_periods is not None:
+        min_sample = 0 if min_sample is None else min_sample
+    else:
+        min_periods = default_min_periods
+        min_sample = 0.25 if min_sample is None else min_sample
+    return min_sample, min_periods
+
 
 @pd2np
 @compiled
@@ -98,12 +107,13 @@ def _ewmrms(a, n, time, wgt, t = np.nan, t0 = 0., t2 = 0., exc_zero = False, max
 
 @pd2np
 @compiled
-def _ewmstd(a, n, time, wgt, t = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = 0.25, bias = False, exc_zero = False, max_move = None, calculator = stdev_calculation_ewm, min_periods = 3, n1 = 0, n0 = 0):
+def _ewmstd(a, n, time, wgt, t = np.nan, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = None, bias = False, exc_zero = False, max_move = None, calculator = stdev_calculation_ewm, min_periods = None, n1 = 0, n0 = 0):
     """
     t = np.nan; t0 = 0; t1 = 0; t2 = 0; w2 = 0; min_sample = 0.25; bias = False; 
     exc_zero = False; max_move = None; calculator = stdev_calculation_ewm; 
     min_periods = 0; n1 = 0
     """
+    min_sample, min_periods = _min_sample_periods(min_sample, min_periods, 3)
     w = _w(n)
     v = (1-w)*wgt
     res = np.empty_like(a)
@@ -181,8 +191,8 @@ def _prev(prev, shape):
 @compiled
 def _ewmx(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
           a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, 
-             w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, 
-             calculation = cor_calculation_ewm, ffill = True, n1 = None, min_periods = 0):
+             w1 = None, w2 = None, n0 = None, min_sample = None, bias = False, overlapping = 1, 
+             calculation = cor_calculation_ewm, ffill = True, n1 = None, min_periods = None):
     """
     cross-sectional correlation of a and b
     
@@ -197,6 +207,7 @@ def _ewmx(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
     >>> res = _ewmx(a, b, n, wgt, time = time, t = None, a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, calculation = cor_calculation_ewm)[0][0]
     
     """
+    min_sample, min_periods = _min_sample_periods(min_sample, min_periods, 0)
     x = a.shape[1]
     y = b.shape[1]
     res0 = np.full((a.shape[0], x, y), NAN, dtype = dtype)
@@ -279,8 +290,8 @@ def _ewmx(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
 @compiled
 def _ewmx2(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
           a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, 
-             w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, 
-             calculation = LR_calculation_ewm, ffill = True, n1 = None, min_periods = 0):
+             w1 = None, w2 = None, n0 = None, min_sample = None, bias = False, overlapping = 1, 
+             calculation = LR_calculation_ewm, ffill = True, n1 = None, min_periods = None):
     """
     cross-sectional correlation of a and b
     
@@ -295,7 +306,7 @@ def _ewmx2(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
     >>> res = _ewmx2(a, b, n, wgt, time = time, t = None, a1 = None, a2 = None, b1 = None, b2 = None, ab = None, prev_a = None, prev_b = None, w1 = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, calculation = LR_calculation_ewm)[0]
     
     """
-    
+    min_sample, min_periods = _min_sample_periods(min_sample, min_periods, 0)    
     x = a.shape[1]
     y = b.shape[1]
     res0 = np.full((a.shape[0], x, y), NAN, dtype = dtype)    
@@ -377,7 +388,7 @@ def _ewmx2(a, b, n, wgt, time, dtype, NAN = np.nan, ONE = 1.0, t = None,
     return (res0,res1), a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t, n1
 
 @compiled
-def _ewmcorrelation(a, n, wgt, dtype, NAN = np.nan, ONE = 1.0, a0 = None, a1 = None, a2 = None, aa = None, prev = None, w2 = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, ffill = True, min_periods = 0, n1 = None):
+def _ewmcorrelation(a, n, wgt, dtype, NAN = np.nan, ONE = 1.0, a0 = None, a1 = None, a2 = None, aa = None, prev = None, w2 = None, n0 = None, min_sample = None, bias = False, overlapping = 1, ffill = True, min_periods = None, n1 = None):
     """
     synchronized correlation calculation
     a is assumed to be total returns as opposed to deltas
@@ -395,7 +406,7 @@ def _ewmcorrelation(a, n, wgt, dtype, NAN = np.nan, ONE = 1.0, a0 = None, a1 = N
     a2[j,k] : the total 2nd moment of k on the pairing (j,k)
     
     """
-
+    min_sample, min_periods = _min_sample_periods(min_sample, min_periods, 0)
     m = a.shape[1]
     res = np.full((a.shape[0], m, m), NAN, dtype = dtype)
     p = w = _w(n)
@@ -419,7 +430,7 @@ def _ewmcorrelation(a, n, wgt, dtype, NAN = np.nan, ONE = 1.0, a0 = None, a1 = N
                 a0[j,j] = a0[j,j] * p + v[i]
                 n0[j,j] = n0[j,j] * p + (1-w)
                 n1[j,j] += 1
-                if n0[j,j] > min_sample:
+                if n0[j,j] > min_sample and n1[j,j]>min_periods:
                     res[i,j,j] = ONE
                 for k in range(j):
                     c = np.nan
@@ -462,11 +473,12 @@ def _ewmcorrelation(a, n, wgt, dtype, NAN = np.nan, ONE = 1.0, a0 = None, a1 = N
 
 
 @compiled
-def _ewmcovariance(a, n, wgt, dtype, NAN = np.nan, ONE = 1.0, a0 = None, a1 = None, aa = None, prev = None, n0 = None, min_sample = 0.25, bias = False, overlapping = 1, ffill = True, n1 = None, min_periods = 0):
+def _ewmcovariance(a, n, wgt, dtype, NAN = np.nan, ONE = 1.0, a0 = None, a1 = None, aa = None, prev = None, n0 = None, min_sample = None, bias = False, overlapping = 1, ffill = True, n1 = None, min_periods = None):
     """
     a = a.values if isinstance(a, pd.DataFrame) else a; n = 30; wgt = np.ones(len(a))
     a0 = None; a1 = None; aa = None; prev = None; n0 = None; min_sample = 0.25; bias = False; overlapping = 1; dtype = None
     """
+    min_sample, min_periods = _min_sample_periods(min_sample, min_periods, 3)
     m = a.shape[1]
     res = np.full((a.shape[0], m, m), np.nan, dtype = dtype)
     p = w = _w(n)
@@ -516,7 +528,7 @@ def _ewmcovariance(a, n, wgt, dtype, NAN = np.nan, ONE = 1.0, a0 = None, a1 = No
 
 
 
-def ewmcovariance_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = 0):
+def ewmcovariance_(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None):
     """
     This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
     
@@ -533,6 +545,7 @@ def ewmcovariance_(a, n, min_sample = 0.25, bias = False, overlapping = 1, insta
     min_sample = 0.25; bias = False; overlapping = 1; instate = None; join = 'outer'; method = None; wgt = None; dtype = None; ffill = True
     
     """
+    min_sample, min_periods = _min_sample_periods(min_sample, min_periods, 0)
     state = {} if instate is None else instate
     arr = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
     if wgt is None:
@@ -554,7 +567,7 @@ def ewmcovariance_(a, n, min_sample = 0.25, bias = False, overlapping = 1, insta
 ewmcovariance_.output = ['data', 'columns', 'index', 'state']
 
 
-def ewmcovariance(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods =0):
+def ewmcovariance(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None):
     """
     This calculates a full covariance matrix as a timeseries. 
 
@@ -604,7 +617,7 @@ def ewmcovariance(a, n, min_sample = 0.25, bias = False, overlapping = 1, instat
 
 
 
-def ewmcovar_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods=0):
+def ewmcovar_(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods=None):
     """
     This calculates a full covariance matrix as a timeseries. Also returns the recent state of the calculations.
     
@@ -628,7 +641,7 @@ def ewmcovar_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = 
 ewmcovar_.output = ['data', 'columns', 'index', 'state']
 
 
-def ewmcovar(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = 0):
+def ewmcovar(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None):
     """
     This calculates a full covariance matrix as a timeseries. 
 
@@ -668,7 +681,7 @@ def ewmcovar(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = N
     return ewmcovar_(a, n, wgt = wgt, min_sample = min_sample, bias = bias, instate = instate , join = join, method = method, dtype = dtype, ffill = ffill, min_periods = min_periods).get('data')
 
 
-def ewmcorr_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods =0):
+def ewmcorr_(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None):
     """
     This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
     See ewmcorr for full details.
@@ -685,7 +698,7 @@ def ewmcorr_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = N
 ewmcorr_.output = ['data', 'state', 'index', 'columns']
 
 
-def ewmcorr(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = 0):
+def ewmcorr(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None):
     """
     This calculates a full correlation matrix as a timeseries. 
 
@@ -775,7 +788,7 @@ def ewmcorr(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = No
     """
     return ewmcorr_(a, n, wgt = wgt, min_sample = min_sample, bias = bias, overlapping = overlapping, instate = instate, join = join, method = method, dtype = dtype, ffill = ffill, min_periods = min_periods).get('data')
 
-def ewmcorrelation_(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = 0):
+def ewmcorrelation_(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None):
     """
     This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
     See ewmcorrelation for full details.
@@ -805,7 +818,7 @@ def ewmcorrelation_(a, n, min_sample = 0.25, bias = False, overlapping = 1, inst
 ewmcorrelation_.output = ['data', 'state', 'index', 'columns']
 
 
-def ewmcorrelation(a, n, min_sample = 0.25, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = 0):
+def ewmcorrelation(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None):
     """
     This calculates a full correlation matrix as a timeseries. 
 
@@ -1070,7 +1083,8 @@ def _ewmGLM(a, b, n, wgt, time, t = np.nan, t0 = 0, a2 = None, ab = None, min_sa
 
 @pd2np
 @compiled
-def _ewmskew(a, n, time, wgt, bias = 0, t = np.nan, t0 = 0, t1 = 0, t2 = 0, t3 = 0, min_sample = 0.25, min_periods = 4, n1 = 0, n0 = 0):
+def _ewmskew(a, n, time, wgt, bias = 0, t = np.nan, t0 = 0, t1 = 0, t2 = 0, t3 = 0, min_sample = 0.25, min_periods = None, n1 = 0, n0 = None):
+    min_sample, min_periods = _min_sample_periods(min_sample, min_periods, 4)
     w = _w(n)
     v = (1-w) * wgt
     days = n if n>1 else w/(1-w)
@@ -1129,10 +1143,11 @@ def _ewmrmst(a, n, wgt = None, time = None, t = None, t0 = 0, t2 = 0, exc_zero =
     return _ewmrms(a, n=n, wgt = wgt, time = time, t = t, t0 = t0, t2 = t2, exc_zero = exc_zero, max_move = max_move, min_periods = min_periods, n1 = n1)
 
 @loop_all
-def _ewmstdt(a, n, wgt = None, time = None, t = None, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = 0.25, bias = False, exc_zero = False, max_move = None, calculator = stdev_calculation_ewm, min_periods = 3, n1 = 0, n0 = 0):
+def _ewmstdt(a, n, wgt = None, time = None, t = None, t0 = 0, t1 = 0, t2 = 0, w2 = 0, min_sample = None, bias = False, exc_zero = False, max_move = None, calculator = stdev_calculation_ewm, min_periods = None, n1 = 0, n0 = 0):
     """
     wgt = None; time = None; t = None; t0 = 0; t1 = 0; t2 = 0; w2 = 0; min_sample = 0.25; bias = False; exc_zero = False; max_move = None; calculator = stdev_calculation_ewm; min_periods = 0; n1 = 0; n0 =0
     """    
+    min_sample, min_periods = _min_sample_periods(min_sample, min_periods, 3)
     time = clock(a, time, t)
     wgt = _wgt(a, wgt)
     t = 0 if t is None or np.isnan(t) else t
@@ -1162,8 +1177,8 @@ def _reshape(res, reshape_a, reshape_b):
 @pd2np
 def _ewmxt(a, b, n, wgt = None, time = None, t = None, a1 = None, a2 = None, b1 = None, b2 = None, 
               ab = None, w1 = None, w2 = None, n0 = None, prev_a = None, prev_b = None, 
-              min_sample = 0.25, bias = False, overlapping = 1, 
-              calculation = cor_calculation_ewm, dim = None, dtype = None, ffill = True, min_periods=0, n1 = None):
+              min_sample = None, bias = False, overlapping = 1, 
+              calculation = cor_calculation_ewm, dim = None, dtype = None, ffill = True, min_periods=None, n1 = None):
     """
     a1 = None; a2 = None; b1 = None; b2 = None; ab = None; w1 = None; w2 = None; n0 = None; min_sample = 0.25; bias = False
     wgt = time = t = dim = None
@@ -1173,6 +1188,7 @@ def _ewmxt(a, b, n, wgt = None, time = None, t = None, a1 = None, a2 = None, b1 
     res = _ewmxt(a,b,n, wgt = wgt, time = time, calculation = cor_calculation_ewm)
     res[0].shape
     """
+    min_sample, min_periods = _min_sample_periods(min_sample, min_periods, 0)
     wgt = _wgt(a, wgt)
     reshape_a = len(a.shape) == 1
     reshape_b = len(b.shape) == 1
@@ -1255,7 +1271,7 @@ def _ewmGLM1dt(a, b, n, AAi = None, overlapping = 1, wgt = None, n0 = 0, t0 = 0,
     return data, t0, n0, ab, prev_a, prev_b, at0, an0, a2, prev
 
 @loop_all
-def _ewmskewt(a, n, wgt = None, time = None, t = None, bias = False, t0 = 0, t1 = 0, t2 = 0, t3 = 0, min_sample = 0.25, min_periods = 4, n1 = 0, n0 = 0):
+def _ewmskewt(a, n, wgt = None, time = None, t = None, bias = False, t0 = 0, t1 = 0, t2 = 0, t3 = 0, min_sample = None, min_periods = None, n1 = 0, n0 = 0):
     time = clock(a, time, t)
     wgt = _wgt(a, wgt)
     t = 0 if t is None or np.isnan(t) else t
@@ -1493,7 +1509,7 @@ def ewmrms(a, n, time=None, axis=0, data = None, exc_zero = False, max_move = No
     state = state or {}
     return first_(_ewmrmst(a, n = n, wgt = wgt, time = time, axis=axis, exc_zero = exc_zero, max_move = max_move, min_periods=min_periods, **state))
 
-def ewmstd_(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, exc_zero = False, max_move = None, instate = None, wgt = None, min_periods=3):
+def ewmstd_(a, n, time = None, min_sample=None, bias = False, axis=0, data = None, exc_zero = False, max_move = None, instate = None, wgt = None, min_periods=None):
     """
     Equivalent to ewmstd but returns a state parameter for instantiation of later calculations.
     See ewmstd documentation for more details
@@ -1511,7 +1527,7 @@ def ewmstd_(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = Non
 
 ewmstd_.output = ['data', 'state']
 
-def ewmstd(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None, exc_zero = False, max_move = None, state = None, wgt = None, min_periods = 3):
+def ewmstd(a, n, time = None, min_sample=None, bias = False, axis=0, data = None, exc_zero = False, max_move = None, state = None, wgt = None, min_periods = None):
     """
     ewmstd is equivalent to a.ewm(n).std() but with...
     - supports np.ndarrays as well as timeseries
@@ -1624,7 +1640,7 @@ def ewmstd(a, n, time = None, min_sample=0.25, bias = False, axis=0, data = None
     return first_(_ewmstdt(a, n = n, wgt = wgt, time = time, min_sample=min_sample, bias = bias, axis=axis, exc_zero = exc_zero, max_move = max_move,  calculator = stdev_calculation_ewm, min_periods = min_periods, **state))
 
 
-def ewmvar_(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = False, data = None, instate = None, max_move = None, wgt = None, min_periods=3):
+def ewmvar_(a, n, time = None, min_sample=None, bias = True, axis=0, exc_zero = False, data = None, instate = None, max_move = None, wgt = None, min_periods=None):
     """
     Equivalent to ewmvar but returns a state parameter for instantiation of later calculations.
     See ewmvar documentation for more details
@@ -1638,7 +1654,7 @@ def ewmvar_(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = 
                                                                                   calculator = variance_calculation_ewm, 
                                                                                   min_periods = min_periods, **state))
 
-def ewmvar(a, n, time = None, min_sample=0.25, bias = True, axis=0, exc_zero = False, data = None, state = None, max_move = None, wgt = None, min_periods =3):
+def ewmvar(a, n, time = None, min_sample=None, bias = True, axis=0, exc_zero = False, data = None, state = None, max_move = None, wgt = None, min_periods = None):
     """
     ewmstd is equivalent to a.ewm(n).var() but with...
     - supports np.ndarrays as well as timeseries
@@ -1743,8 +1759,8 @@ def _to_pandas(res, a, b):
     return res
 
 
-def ewmx_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, 
-             overlapping = 1, join = 'outer', method = None, calculation = cor_calculation_ewm, is_returns = False, dim = None, dtype = None, ffill = True, min_periods = 0):
+def ewmx_(a, b, n, time = None, min_sample = None, bias = True, data = None, instate = None, wgt = None, 
+             overlapping = 1, join = 'outer', method = None, calculation = cor_calculation_ewm, is_returns = False, dim = None, dtype = None, ffill = True, min_periods = None):
     """
     Equivalent to ewmxcor but returns a state parameter for instantiation of later calculations.
     See ewmxcor documentation for more details
@@ -1783,8 +1799,8 @@ def ewmx_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, ins
     return dictattr(data = res, state = state)
 
 
-def ewmxcor_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, instate = None, wgt = None, overlapping = 1, 
-             join = 'outer', method = None, is_returns = False, dtype = None, ffill = True, min_periods = 0):
+def ewmxcor_(a, b, n, time = None, min_sample = None, bias = True, data = None, instate = None, wgt = None, overlapping = 1, 
+             join = 'outer', method = None, is_returns = False, dtype = None, ffill = True, min_periods = None):
 
     return ewmx_(a, b, n, time = time, min_sample = min_sample, bias = bias, data = data, instate = instate, wgt = wgt, 
                  overlapping = overlapping, join = join, method = method, calculation = cor_calculation_ewm, is_returns=is_returns, dtype = dtype, ffill = ffill, min_periods = min_periods)
@@ -1792,8 +1808,8 @@ def ewmxcor_(a, b, n, time = None, min_sample = 0.25, bias = True, data = None, 
 ewmxcor_.output = ['data', 'state']
 
 
-def ewmxcor(a, b, n, min_sample = 0.25, bias = True, data = None, state = None, 
-            wgt = None, overlapping = 1, is_returns = False, dtype = None, ffill = True, min_periods = 0):
+def ewmxcor(a, b, n, min_sample = None, bias = True, data = None, state = None, 
+            wgt = None, overlapping = 1, is_returns = False, dtype = None, ffill = True, min_periods = None):
     """
     calculates pair-wise correlation between a and b returns, assuming a and b are TOTAL returns
     
@@ -1962,7 +1978,7 @@ def ewmGLM(a, b, n, overlapping = 1, AAi = None, min_sample = 0.25, data = None,
 
 
 
-def ewmxLR_(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = None, m = None, instate = None, wgt = None, is_returns = False, dtype = None, ffill = True, min_periods = 0):
+def ewmxLR_(a, b, n, time = None, min_sample = None, bias = True, axis = 0, c = None, m = None, instate = None, wgt = None, is_returns = False, dtype = None, ffill = True, min_periods = None):
     """
     Calculates a Linear regression of a versus b
     
@@ -1994,7 +2010,7 @@ def ewmxLR_(a, b, n, time = None, min_sample = 0.25, bias = True, axis = 0, c = 
 
 ewmxLR_.output = ['c', 'm', 'state']
 
-def ewmxLR(a, b, n, time = None, min_sample = 0.25, bias = True, state = None, wgt = None, is_returns = False, dtype = None, ffill = True, min_periods = 0):
+def ewmxLR(a, b, n, time = None, min_sample = None, bias = True, state = None, wgt = None, is_returns = False, dtype = None, ffill = True, min_periods = None):
     """
     calculates pair-wise linear regression between changes in a and b.
     
@@ -2077,7 +2093,7 @@ def ewmxLR(a, b, n, time = None, min_sample = 0.25, bias = True, state = None, w
 
 ewmxLR.output = ['c', 'm']
 
-def ewmskew_(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = None, instate = None, wgt = None, min_periods = 4):
+def ewmskew_(a, n, time = None, bias = False, min_sample = None, axis=0, data = None, instate = None, wgt = None, min_periods = None):
     """
     Equivalent to ewmskew but returns a state parameter for instantiation of later calculations.
     See ewmskew documentation for more details
@@ -2087,7 +2103,7 @@ def ewmskew_(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = 
 
 ewmskew_.output = ['data', 'state']
 
-def ewmskew(a, n, time = None, bias = False, min_sample = 0.25, axis=0, data = None, state = None, wgt = None, min_periods = 4):
+def ewmskew(a, n, time = None, bias = False, min_sample = None, axis=0, data = None, state = None, wgt = None, min_periods = None):
     """
     Equivalent to a.ewm(n).skew() but with...
     - supports np.ndarrays as well as timeseries

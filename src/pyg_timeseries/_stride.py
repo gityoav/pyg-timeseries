@@ -25,7 +25,7 @@ def _cast_strided_result(a, va, res):
 
 @loop_all
 @pd2np
-def _rolling_quantile(a, n, quantile, vec=None, min_periods=None):
+def _rolling_quantile(a, n, quantile, vec=None, min_periods=None, method = 'linear'):
     """
     >>> vec = None; quantile = [0.1, 0.2]; n = 100; a = np.arange(1000) * 1.
     >>> a[np.random.normal(0,1,1000) > 1.5] = np.nan
@@ -49,7 +49,7 @@ def _rolling_quantile(a, n, quantile, vec=None, min_periods=None):
     )
     if abs(n) <= len(na):
         strided = _as_strided(na, abs(n), 1)
-        res = np.quantile(strided, quantile, axis=1).T
+        res = np.quantile(strided, quantile, axis=1, method = method).T
     else:
         res = np.array([])
 
@@ -64,7 +64,7 @@ def _rolling_quantile(a, n, quantile, vec=None, min_periods=None):
             # rolling(n, min_periods).quantile once >= min_periods obs are available.
             initial = np.array(
                 [
-                    np.quantile(na[:i], quantile)
+                    np.quantile(na[:i], quantile, method = method)
                     for i in range(min_periods, min_periods + n_)
                 ]
             )
@@ -78,7 +78,7 @@ def _rolling_quantile(a, n, quantile, vec=None, min_periods=None):
 
 
 def rolling_quantile(
-    a, n, quantile=0.5, axis=0, data=None, state=None, min_periods=None
+    a, n, quantile=0.5, axis=0, data=None, state=None, min_periods=None, method = 'linear',
 ):
     """
     equivalent to a.rolling(n).quantile(q) except...
@@ -210,7 +210,7 @@ def rolling_quantile(
 
 
 def rolling_quantile_(
-    a, n, quantile=0.5, axis=0, min_periods=None, data=None, instate=None
+    a, n, quantile=0.5, axis=0, min_periods=None, data=None, instate=None, method = 'linear',
 ):
     """
     Equivalent to rolling_quantile(a) but returns also the state.
@@ -233,7 +233,7 @@ def rolling_quantile_(
     res = _data_state(
         ["data", "vec"],
         _rolling_quantile(
-            a, n=n, quantile=qs, min_periods=min_periods, axis=axis, **state
+            a, n=n, quantile=qs, min_periods=min_periods, axis=axis, method = method, **state
         ),
     )
     qs = as_list(quantile)
