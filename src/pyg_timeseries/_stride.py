@@ -25,7 +25,7 @@ def _cast_strided_result(a, va, res):
 
 @loop_all
 @pd2np
-def _rolling_quantile(a, n, quantile, vec=None, min_periods=None, method = 'linear'):
+def _rolling_stride(a, n, vec=None, min_periods=None, width = 0, function = np.quantile, **function_parameters):
     """
     >>> vec = None; quantile = [0.1, 0.2]; n = 100; a = np.arange(1000) * 1.
     >>> a[np.random.normal(0,1,1000) > 1.5] = np.nan
@@ -41,15 +41,10 @@ def _rolling_quantile(a, n, quantile, vec=None, min_periods=None, method = 'line
         a_ = a
     mask = ~np.isnan(a_)
     na = a_[mask]
-    quantile = np.array(quantile)
-    va = (
-        np.full_like(a_, np.nan)
-        if len(quantile.shape) == 0
-        else np.full([a_.shape[0], quantile.shape[0]], np.nan)
-    )
+    va = np.full([a_.shape[0], width], np.nan) if width else np.full_like(a_, np.nan)
     if abs(n) <= len(na):
         strided = _as_strided(na, abs(n), 1)
-        res = np.quantile(strided, quantile, axis=1, method = method).T
+        res = function(strided, axis=1, **function_parameters).T
     else:
         res = np.array([])
 
@@ -64,7 +59,7 @@ def _rolling_quantile(a, n, quantile, vec=None, min_periods=None, method = 'line
             # rolling(n, min_periods).quantile once >= min_periods obs are available.
             initial = np.array(
                 [
-                    np.quantile(na[:i], quantile, method = method)
+                    function(na[:i], **function_parameters)
                     for i in range(min_periods, min_periods + n_)
                 ]
             )
@@ -78,7 +73,7 @@ def _rolling_quantile(a, n, quantile, vec=None, min_periods=None, method = 'line
 
 
 def rolling_quantile(
-    a, n, quantile=0.5, axis=0, data=None, state=None, min_periods=None, method = 'linear',
+    a, n, quantile=0.5, axis=0, data=None, state=None, min_periods=None, interpolation  = 'linear',
 ):
     """
     equivalent to a.rolling(n).quantile(q) except...
@@ -169,6 +164,7 @@ def rolling_quantile(
 
     """
     qs = as_list(quantile)
+    
     if len(getattr(a, "shape", [])) == 2 and a.shape[1] > 1:
         if len(qs) > 1:
             raise ValueError(
@@ -183,9 +179,9 @@ def rolling_quantile(
         ## also matches the whole-series ramp value at that point.
         min_periods = 1
     res = first_(
-        _rolling_quantile(
-            a, n=n, quantile=qs, axis=axis, min_periods=min_periods, **state
-        )
+        _rolling_stride(
+            a, n=n, q=np.array(qs), width = 0 if is_num(qs) else len(qs),
+            axis=axis, min_periods=min_periods, method  = interpolation ,**state)
     )
     if is_num(quantile) and len(a.shape) == 1:  ## cast back to a series
 
@@ -210,7 +206,7 @@ def rolling_quantile(
 
 
 def rolling_quantile_(
-    a, n, quantile=0.5, axis=0, min_periods=None, data=None, instate=None, method = 'linear',
+    a, n, quantile=0.5, axis=0, min_periods=None, data=None, instate=None, interpolation = 'linear',
 ):
     """
     Equivalent to rolling_quantile(a) but returns also the state.
@@ -232,8 +228,8 @@ def rolling_quantile_(
         min_periods = 1
     res = _data_state(
         ["data", "vec"],
-        _rolling_quantile(
-            a, n=n, quantile=qs, min_periods=min_periods, axis=axis, method = method, **state
+        _rolling_stride(
+            a, n=n, q=np.array(qs), width = 0 if is_num(qs) else len(qs), min_periods=min_periods, axis=axis, method = interpolation , **state
         ),
     )
     qs = as_list(quantile)
