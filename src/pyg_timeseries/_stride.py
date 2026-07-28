@@ -34,25 +34,26 @@ def _rolling_quantile(a, n, quantile, vec = None, min_periods = None):
     >>> rolling_quantile_(a, n, quantile, min_periods = min_periods)
     """
     vec = _vec(a, vec, 0)
+    mask = ~np.isnan(a)
+    na = a[mask]
     if len(vec):
-        a_ = np.concatenate([vec,a])
+        na = np.concatenate([vec,na])
     else:
-        a_ = a
-    mask = ~np.isnan(a_)
-    na = a_[mask]
+        na = a
     quantile = np.array(quantile)
-    va = np.empty_like(a_) if len(quantile.shape) == 0 else np.empty([a_.shape[0], quantile.shape[0]])
+    va = np.full(a.shape, np.nan) if len(quantile.shape) == 0 else np.full((a.shape[0], quantile.shape[0]), np.nan)
     strided = _as_strided(na, abs(n), 1)
     res = np.quantile(strided, quantile, axis = 1).T
-    n_ = min(n, len(res))-1
-    if min_periods is not None and min_periods > n:
-        res[:min_periods-n] = np.nan
-    elif min_periods is not None and n_ > min_periods:
-        initial = np.array([np.quantile(na[:i+1], quantile) for i in range(min_periods, n_)]) 
-        res = np.concatenate([initial, res])        
+    if min_periods is not None:
+        if min_periods > n:
+            res[:min_periods-n] = np.nan
+        else:
+            n_ = min(n, len(res))-1
+            min_periods_ = min_periods + len(vec)        
+            if n_ > min_periods_:
+                initial = np.array([np.quantile(na[:i+1], quantile) for i in range(min_periods_, n_)]) 
+                res = np.concatenate([initial, res])        
     rtn = _cast_strided_result(a, va, res)
-    if len(vec):
-        rtn = rtn[-len(a):]
     return rtn, na[-(n-1):]
 
 
@@ -145,14 +146,11 @@ def rolling_quantile(a, n, quantile = 0.5, axis = 0, data = None, state = None, 
     timeseries/array of quantile(s)
 
     """
-    qs = as_list(quantile)
-    if len(getattr(a, 'shape', [])) == 2 and a.shape[1] > 1:
-        if len(qs) > 1:
-            raise ValueError('Can do multiple quantiles %s only for single-column data'%qs)
-        else:
-            qs = qs[0]
+    if len(getattr(a, 'shape', [])) == 2 and a.shape[1] > 1 and len(as_list(quantile)) > 1:
+        raise ValueError('Can do multiple quantiles %s only for single-column data'%quantile)
     state = state or {}
-    res = first_(_rolling_quantile(a, n = n , quantile = qs, axis = axis, min_periods = min_periods, **state))
+    res = first_(_rolling_quantile(a, n = n , quantile = quantile, axis = axis, min_periods = min_periods, **state))
+    qs = as_list(quantile)
     if is_num(quantile) and len(a.shape) == 1: ## cast back to a series
         @loop(list, dict)
         def add_qs(res):
@@ -170,14 +168,10 @@ def rolling_quantile_(a, n, quantile = 0.5, axis = 0, min_periods = None, data =
     Equivalent to rolling_quantile(a) but returns also the state. 
     For full documentation, look at rolling_quantile.__doc__    
     """
-    qs = as_list(quantile)
-    if len(getattr(a, 'shape', [])) == 2 and a.shape[1] > 1:
-        if len(qs) > 1:
-            raise ValueError('Can do multiple quantiles %s only for single-column data'%qs)
-        else:
-            qs = qs[0]
+    if len(getattr(a, 'shape', [])) == 2 and a.shape[1] > 1 and len(as_list(quantile)) > 1:
+        raise ValueError('Can do multiple quantiles %s only for single-column data'%quantile)
     state = instate  or {}
-    res = _data_state(['data','vec'],_rolling_quantile(a, n = n, quantile = qs, min_periods = min_periods, axis = axis, **state))
+    res = _data_state(['data','vec'],_rolling_quantile(a, n = n, quantile = quantile, min_periods = min_periods, axis = axis, **state))
     qs = as_list(quantile)
     if is_num(quantile) and len(a.shape) == 1: ## cast back to a series
         @loop(list, dict)

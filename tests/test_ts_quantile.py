@@ -1,5 +1,5 @@
 from pyg_timeseries import rolling_quantile, rolling_quantile_, fnna, expanding_rank
-from pyg_base import eq, dictable, drange, nona, shape
+from pyg_base import eq, dictable, drange, nona, shape, timer
 import pandas as pd; import numpy as np
 import pytest
 
@@ -37,3 +37,11 @@ def test_expandning_rank():
     rank = expanding_rank(a) 
     assert eq(rank, pd.Series([0, 1, np.nan, -1, 1, 0.25], drange(-5))) 
     
+def test_rolling_quantile_timing():
+    a = np.random.normal(0,1,10000)
+    ts = pd.Series(a, drange(-9999))
+    res = rolling_quantile_(ts, 500, 0.5, min_periods = 0)
+    a = np.array([3]); n = 500; quantile = 0.5; min_periods = 0; state = instate=res['state']
+    res = rolling_quantile_(a, 500, 0.5, min_periods = 0, instate = instate)['data']
+    f = timer(lambda a: [rolling_quantile_(np.array([b]), 500, 0.5, min_periods = 0, instate = instate)['data'] for b in a])        
+    all_values = f(np.random.normal(0,1,10000))
