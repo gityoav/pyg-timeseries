@@ -213,4 +213,4 @@ def rolling_quantile_(a, n, quantile=0.5, axis=0, min_periods=None, data=None, i
     return _cast_quantile_result(res, a, quantile)
 
 
-rolling_quantile_.ouput = ["data", "state"]
+rolling_quantile_.output = ["data", "state"]
