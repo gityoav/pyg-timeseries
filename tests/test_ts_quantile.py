@@ -38,10 +38,15 @@ def test_expandning_rank():
     assert eq(rank, pd.Series([0, 1, np.nan, -1, 1, 0.25], drange(-5))) 
     
 def test_rolling_quantile_timing():
+    n = 500; quantile = 0.5; min_periods = 0; axis = 0; state = instate = None;
     a = np.random.normal(0,1,10000)
     ts = pd.Series(a, drange(-9999))
-    res = rolling_quantile_(ts, 500, 0.5, min_periods = 0)
-    a = np.array([3]); n = 500; quantile = 0.5; min_periods = 0; state = instate=res['state']
-    res = rolling_quantile_(a, 500, 0.5, min_periods = 0, instate = instate)['data']
+    for min_periods in [None, 1000,500,100,0]:
+        res = rolling_quantile_(ts, 500, 0.5, min_periods = 0)
+        s = ts.rolling(500, min_periods = 0).quantile(0.5)
+        assert abs(res['data']- s).max() < 1e-10    
+    state = instate = res['state']
+    vec = state['vec']
     f = timer(lambda a: [rolling_quantile_(np.array([b]), 500, 0.5, min_periods = 0, instate = instate)['data'] for b in a])        
+    rolling_quantile_(a, 500, 0.5, min_periods = 0, instate = instate)['data']
     all_values = f(np.random.normal(0,1,10000))

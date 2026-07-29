@@ -25,7 +25,8 @@ def _cast_strided_result(a, va, res):
 
 @loop_all
 @pd2np
-def _rolling_stride(a, n, vec=None, min_periods=None, width = 0, function = np.quantile, **function_parameters):
+def _rolling_stride(a, n, vec=None, min_periods=None, width = 0, function = np.quantile, 
+                    **function_parameters):
     """
     >>> vec = None; quantile = [0.1, 0.2]; n = 100; a = np.arange(1000) * 1.
     >>> a[np.random.normal(0,1,1000) > 1.5] = np.nan
@@ -51,7 +52,7 @@ def _rolling_stride(a, n, vec=None, min_periods=None, width = 0, function = np.q
             n_ = min(n, len(res))-1
             min_periods_ = min_periods + len(vec)        
             if n_ > min_periods_:
-                initial = np.array([function(na[:i], **function_parameters) for i in range(min_periods_, n_)])
+                initial = np.array([function(na[:i+1], **function_parameters) for i in range(min_periods_, n_)])
                 res = np.concatenate([initial, res])        
     rtn = _cast_strided_result(a, va, res)
     return rtn, na[-(n-1):]
@@ -152,7 +153,14 @@ def rolling_quantile(
         raise ValueError('Can do multiple quantiles %s only for single-column data'%quantile)
     state = state or {}
     qs = as_list(quantile)
-    res = first_(_rolling_stride(a, n=n, q=np.array(quantile), width = 0 if is_num(quantile) else len(qs), axis=axis, min_periods=min_periods, method = interpolation ,**state))
+    width = 0 if is_num(quantile) else len(qs)
+
+    res = first_(_rolling_stride(a, n=n, 
+                                 q=np.array(quantile), 
+                                 width = width, 
+                                 axis=axis, 
+                                 min_periods=min_periods, 
+                                 method = interpolation ,**state))
     if is_num(quantile) and len(a.shape) == 1:  ## cast back to a series
         @loop(list, dict, tuple)
         def add_qs(res):
@@ -175,7 +183,14 @@ def rolling_quantile_(a, n, quantile=0.5, axis=0, min_periods=None, data=None, i
         raise ValueError('Can do multiple quantiles %s only for single-column data'%quantile)
     state = instate  or {}
     qs = as_list(quantile)
-    res = _data_state(["data", "vec"],_rolling_stride(a, n=n, q=np.array(quantile), width = 0 if is_num(quantile) else len(qs), min_periods=min_periods, axis=axis, method = interpolation , **state))
+    width = 0 if is_num(quantile) else len(qs)
+    res = _data_state(["data", "vec"],_rolling_stride(a, n=n,                                                        
+                                                      q = np.array(quantile),
+                                                      width = width, 
+                                                      min_periods=min_periods, 
+                                                      axis=axis, 
+                                                      function = np.quantile,
+                                                      method = interpolation , **state))
     if is_num(quantile) and len(a.shape) == 1:  ## cast back to a series
         @loop(list, dict, tuple)
         def add_qs(res):
