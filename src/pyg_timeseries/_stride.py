@@ -1,5 +1,5 @@
 import numpy as np
-from pyg_timeseries._rolling import _fnna, _vec
+from pyg_timeseries._rolling import _vec
 from pyg_timeseries._decorators import _data_state, first_
 from pyg_base import pd2np, as_list, loop_all, loop, is_pd, is_num, as_series, is_df
 
@@ -10,52 +10,90 @@ def _as_strided(a, L, S=1):
     return np.lib.stride_tricks.as_strided(a, shape=(nrows, L), strides=(S * n, n))
 
 
-def _cast_strided_result(a, va, res):
+def _trim_state(values, n):
     """
-    casts the values from res, to the last values of a that are not nan
+    the state only ever needs the last n-1 observations. Trimming also protects against a state that
+    was built with a longer window, so len(state) < n always holds.
     """
-    if len(res):
-        mask = ~np.isnan(a)
-        msk = mask[mask]
-        msk[: -len(res)] = False
-        mask[mask] = msk
-        va[mask] = res
-    return va
+    return values[len(values) - n + 1:] if len(values) >= n else values
+
+
+def _strided_results(history, n_vec, t, n, min_periods, width, function, function_parameters):
+    """
+    applies function to a rolling window of the last n values of history, returning one result per
+    element of history beyond the leading n_vec (which are the state carried in from a previous call).
+
+    history[:n_vec] is the state and history[n_vec:] this call's observations. The i'th result is
+    computed off the last min(n, n_vec + i + 1) values of the history up to it: everything available
+    while the window is still filling up (the warm-up ramp) and the last n values thereafter.
+
+    t is the number of observations seen before this call, so the i'th result is observation t + i + 1
+    and is only emitted once that reaches min_periods. t exceeds n_vec whenever the history is longer
+    than the n-1 values the state keeps, which matters when min_periods > n.
+    """
+    n_res = len(history) - n_vec
+    res = np.full((n_res,) if width == 0 else (n_res, width), np.nan)
+    window = np.minimum(n, n_vec + 1 + np.arange(n_res))    ## values available at each result point
+    full_window = window == n
+    if full_window.any():
+        res[full_window] = function(_as_strided(history, n), axis=1, **function_parameters).T
+    for i in np.where(~full_window)[0]:
+        res[i] = function(history[:window[i]], **function_parameters)
+    res[t + 1 + np.arange(n_res) < min_periods] = np.nan
+    return res
 
 
 @loop_all
 @pd2np
-def _rolling_stride(a, n, vec=None, min_periods=None, width = 0, function = np.quantile, 
+def _rolling_stride(a, n, vec=None, t=None, min_periods=None, width = 0, function = np.quantile,
                     **function_parameters):
     """
-    >>> vec = None; quantile = [0.1, 0.2]; n = 100; a = np.arange(1000) * 1.
+    nan-skipping rolling application of function to a window of the last n VALID observations of a.
+    Returns (data, vec, t) where vec is the last n-1 valid observations and t the number of valid
+    observations seen, so that resuming from a state reproduces the whole-series result.
+
+    >>> quantile = [0.1, 0.2]; n = 100; a = np.arange(1000) * 1.
     >>> a[np.random.normal(0,1,1000) > 1.5] = np.nan
     >>> min_periods = 10
-    >>> _rolling_quantile(a, n, quantile, vec = None, min_periods = min_periods)
+    >>> _rolling_stride(a, n, q = np.array(quantile), width = 2, min_periods = min_periods)
     >>> rolling_quantile(a, n, quantile, min_periods = min_periods)
     >>> rolling_quantile_(a, n, quantile, min_periods = min_periods)
     """
-    vec = _vec(a, vec, 0)
+    n = abs(n)
+    min_periods = n if min_periods is None else min_periods
+    vec = _trim_state(_vec(a, vec, 0), n)
+    t = len(vec) if t is None else t
     mask = ~np.isnan(a)
-    na = a[mask]
-    if len(vec):
-        na = np.concatenate([vec,na])
-    else:
-        na = a
-    va = np.full(a.shape, np.nan) if width == 0 else np.full((a.shape[0], width), np.nan)
-    strided = _as_strided(na, abs(n), 1)
-    res = function(strided, axis=1, **function_parameters).T
-    if min_periods is not None:
-        if min_periods > n:
-            res[:min_periods-n] = np.nan
-        else:
-            n_ = min(n, len(res))-1
-            min_periods_ = min_periods + len(vec)        
-            if n_ > min_periods_:
-                initial = np.array([function(na[:i+1], **function_parameters) for i in range(min_periods_, n_)])
-                res = np.concatenate([initial, res])        
-    rtn = _cast_strided_result(a, va, res)
-    return rtn, na[-(n-1):]
+    history = np.concatenate([vec, a[mask]])    ## previous valid observations followed by a's own
+    data = np.full(a.shape if width == 0 else (a.shape[0], width), np.nan)
+    data[mask] = _strided_results(history, len(vec), t, n, min_periods, width, function, function_parameters)
+    return data, _trim_state(history, n), t + len(history) - len(vec)
+
+
+def _quantile_width(a, quantile):
+    """
+    the number of columns _rolling_stride must produce per column of a: 0 for a single quantile (the
+    result has the shape of a) and one column per quantile otherwise
+    """
+    if len(getattr(a, 'shape', [])) == 2 and a.shape[1] > 1 and len(as_list(quantile)) > 1:
+        raise ValueError('Can do multiple quantiles %s only for single-column data'%quantile)
+    return 0 if is_num(quantile) else len(as_list(quantile))
+
+
+def _cast_quantile_result(res, a, quantile):
+    """
+    a single quantile of a 1d input is cast back to a series/1d array; multiple quantiles are labelled
+    with the quantile they represent
+    """
+    qs = as_list(quantile)
+    @loop(list, dict, tuple)
+    def cast(res):
+        if is_num(quantile) and len(a.shape) == 1:  ## cast back to a series
+            return as_series(res) if is_df(res) else res[:, 0] if isinstance(res, np.ndarray) and len(res.shape) == 2 else res
+        if is_pd(res) and len(res.shape) == 2 and res.shape[1] == len(qs):
+            res.columns = qs
+        return res
+    return cast(res)
 
 
 def rolling_quantile(
@@ -149,29 +187,14 @@ def rolling_quantile(
     timeseries/array of quantile(s)
 
     """
-    if len(getattr(a, 'shape', [])) == 2 and a.shape[1] > 1 and len(as_list(quantile)) > 1:
-        raise ValueError('Can do multiple quantiles %s only for single-column data'%quantile)
-    state = state or {}
-    qs = as_list(quantile)
-    width = 0 if is_num(quantile) else len(qs)
-
-    res = first_(_rolling_stride(a, n=n, 
-                                 q=np.array(quantile), 
-                                 width = width, 
-                                 axis=axis, 
-                                 min_periods=min_periods, 
-                                 method = interpolation ,**state))
-    if is_num(quantile) and len(a.shape) == 1:  ## cast back to a series
-        @loop(list, dict, tuple)
-        def add_qs(res):
-            return as_series(res) if is_df(res) else res[:, 0] if isinstance(res, np.ndarray) and len(res.shape) == 2 else res
-    else:
-        @loop(list, dict, tuple)
-        def add_qs(res):
-            if is_pd(res) and len(res.shape) == 2 and res.shape[1] == len(as_list(qs)):
-                res.columns = as_list(qs)
-            return res
-    return add_qs(res)
+    width = _quantile_width(a, quantile)
+    res = first_(_rolling_stride(a, n=n,
+                                 q=np.array(quantile),
+                                 width = width,
+                                 axis=axis,
+                                 min_periods=min_periods,
+                                 method = interpolation , **(state or {})))
+    return _cast_quantile_result(res, a, quantile)
 
 
 def rolling_quantile_(a, n, quantile=0.5, axis=0, min_periods=None, data=None, instate=None, interpolation = 'linear'):
@@ -179,29 +202,15 @@ def rolling_quantile_(a, n, quantile=0.5, axis=0, min_periods=None, data=None, i
     Equivalent to rolling_quantile(a) but returns also the state.
     For full documentation, look at rolling_quantile.__doc__
     """
-    if len(getattr(a, 'shape', [])) == 2 and a.shape[1] > 1 and len(as_list(quantile)) > 1:
-        raise ValueError('Can do multiple quantiles %s only for single-column data'%quantile)
-    state = instate  or {}
-    qs = as_list(quantile)
-    width = 0 if is_num(quantile) else len(qs)
-    res = _data_state(["data", "vec"],_rolling_stride(a, n=n,                                                        
+    width = _quantile_width(a, quantile)
+    res = _data_state(["data", "vec", "t"],_rolling_stride(a, n=n,
                                                       q = np.array(quantile),
-                                                      width = width, 
-                                                      min_periods=min_periods, 
-                                                      axis=axis, 
+                                                      width = width,
+                                                      min_periods=min_periods,
+                                                      axis=axis,
                                                       function = np.quantile,
-                                                      method = interpolation , **state))
-    if is_num(quantile) and len(a.shape) == 1:  ## cast back to a series
-        @loop(list, dict, tuple)
-        def add_qs(res):
-            return as_series(res) if is_df(res) else res[:, 0] if isinstance(res, np.ndarray) and len(res.shape) == 2 else res
-    else:
-        @loop(list, dict, tuple)
-        def add_qs(res):
-            if is_pd(res) and len(res.shape) == 2 and res.shape[1] == len(as_list(qs)):
-                res.columns = as_list(qs)
-            return res
-    return add_qs(res)
+                                                      method = interpolation , **(instate or {})))
+    return _cast_quantile_result(res, a, quantile)
 
 
 rolling_quantile_.ouput = ["data", "state"]
