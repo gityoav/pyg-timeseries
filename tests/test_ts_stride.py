@@ -5,6 +5,8 @@ import numpy as np
 from pyg_base import eq, drange, nona, near
 from pyg_timeseries import rolling_quantile, rolling_quantile_
 
+arq = rolling_quantile
+arq_ = rolling_quantile_
 
 def ck(res, df):
     assert len(nona(df)) == len(nona(res))
@@ -20,6 +22,7 @@ def test_short_dataframe():
                 res = rolling_quantile_(ts, 500, 0.5, min_periods = min_periods, interpolation = interpolation)['data']
                 df = ts.rolling(500, min_periods=min_periods).quantile(0.5, interpolation = interpolation)
                 ck(res, df)
+
 
 def test_rolling_quantile_state_is_safe_and_consistent():
     a = pd.Series(np.random.normal(0, 1, 800), drange(-799))
