@@ -35,7 +35,7 @@ def _strided_results(history, n_vec, t, n, min_periods, width, function, functio
     than the n-1 values the state keeps, which matters when min_periods > n.
     """
     n_res = len(history) - n_vec
-    res = np.full((n_res,) if width == 0 else (n_res, width), np.nan)1
+    res = np.full((n_res,) if width == 0 else (n_res, width), np.nan)
     window = np.minimum(n, n_vec + 1 + np.arange(n_res))    ## values available at each result point
     full_window = window == n
     if full_window.any():
