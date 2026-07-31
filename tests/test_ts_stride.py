@@ -2,7 +2,7 @@
 import pandas as pd
 import numpy as np
 
-from pyg_base import eq, drange, nona, near
+from pyg_base import eq, drange, nona, near, timer
 from pyg_timeseries import rolling_quantile, rolling_quantile_
 
 arq = rolling_quantile
@@ -84,3 +84,13 @@ def test_rolling_quantile_matches_pandas_rampup():
     assert list(arq(a, 100, [0.1, 0.5, 0.9]).columns) == [0.1, 0.5, 0.9]
     df = pd.DataFrame(np.random.normal(0, 1, (400, 3)), a.index, columns=['x', 'y', 'z'])
     assert list(arq(df, 100, 0.05, min_periods=10).columns) == ['x', 'y', 'z']
+
+def test_rolling_quantile_timing():
+    a = pd.Series(np.random.normal(0, 1, 10000), drange(-9999))
+    t1 = timer(rolling_quantile, n = 10)
+    t2 = timer(lambda a, n, min_periods, quantile: a.rolling(n, min_periods = min_periods).quantile(q), n = 10)
+    for n in [10,100,1000]:
+        for q in [0.1, 0.5]:
+            for min_periods in [None]:
+                x,y = t1(a, n = n, min_periods = min_periods, quantile = q), t2(a, n = n, min_periods = min_periods, quantile = q)
+                assert near(x,y)
