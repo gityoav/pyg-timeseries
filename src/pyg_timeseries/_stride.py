@@ -318,7 +318,11 @@ def _cast_quantile_result(res, a, quantile):
     @loop(list, dict, tuple)
     def cast(res):
         if single and len(a.shape) == 1:  ## cast back to a series
-            return as_series(res) if is_df(res) else res[:, 0] if isinstance(res, np.ndarray) and len(res.shape) == 2 else res
+            if is_df(res):
+                return as_series(res)
+            if isinstance(res, np.ndarray) and len(res.shape) == 2:
+                return res[:, 0]
+            return res
         if is_pd(res) and len(res.shape) == 2 and res.shape[1] == len(qs):
             res.columns = qs
         return res
