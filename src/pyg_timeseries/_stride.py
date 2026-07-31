@@ -278,14 +278,34 @@ def _rolling_stride(a, n, vec=None, t=None, min_periods=None, width = 0, functio
     return data, _trim_state(history, n), t + len(history) - len(vec)
 
 
-def _quantile_width(a, quantile):
+def _is_single_quantile(quantile) -> bool:
+    """
+    whether one quantile was asked for rather than a sequence of them, the result then keeping the shape
+    of the input instead of gaining a column per quantile. A 0d array holds a single quantile just as a
+    float does, which is_num alone does not recognise.
+    """
+    return is_num(quantile) or (isinstance(quantile, np.ndarray) and quantile.ndim == 0)
+
+
+def _quantiles(quantile) -> list:
+    """
+    the quantiles asked for, as a flat list of numbers. An array is a sequence of quantiles just as a
+    list or a tuple is, but as_list keeps an array whole, so unwrap it here - and to plain floats, so
+    that an array and the equivalent list label their columns identically.
+    """
+    if isinstance(quantile, np.ndarray):
+        return [quantile.item()] if quantile.ndim == 0 else quantile.ravel().tolist()
+    return as_list(quantile)
+
+
+def _quantile_width(a, quantile) -> int:
     """
     the number of columns _rolling_stride must produce per column of a: 0 for a single quantile (the
     result has the shape of a) and one column per quantile otherwise
     """
-    if len(getattr(a, 'shape', [])) == 2 and a.shape[1] > 1 and len(as_list(quantile)) > 1:
+    if len(getattr(a, 'shape', [])) == 2 and a.shape[1] > 1 and len(_quantiles(quantile)) > 1:
         raise ValueError('Can do multiple quantiles %s only for single-column data'%quantile)
-    return 0 if is_num(quantile) else len(as_list(quantile))
+    return 0 if _is_single_quantile(quantile) else len(_quantiles(quantile))
 
 
 def _cast_quantile_result(res, a, quantile):
@@ -293,10 +313,11 @@ def _cast_quantile_result(res, a, quantile):
     a single quantile of a 1d input is cast back to a series/1d array; multiple quantiles are labelled
     with the quantile they represent
     """
-    qs = as_list(quantile)
+    qs = _quantiles(quantile)
+    single = _is_single_quantile(quantile)
     @loop(list, dict, tuple)
     def cast(res):
-        if is_num(quantile) and len(a.shape) == 1:  ## cast back to a series
+        if single and len(a.shape) == 1:  ## cast back to a series
             return as_series(res) if is_df(res) else res[:, 0] if isinstance(res, np.ndarray) and len(res.shape) == 2 else res
         if is_pd(res) and len(res.shape) == 2 and res.shape[1] == len(qs):
             res.columns = qs
