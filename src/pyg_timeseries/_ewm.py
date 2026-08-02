@@ -1,7 +1,7 @@
 import numpy as np; import pandas as pd
 from pyg_timeseries._math import stdev_calculation_ewm, skew_calculation, cor_calculation_ewm, covariance_calculation, LR_calculation_ewm, variance_calculation_ewm, _w
 from pyg_timeseries._decorators import compiled, first_, _data_state
-from pyg_timeseries._expanding import cumsum
+from pyg_timeseries._expanding import cumsum, cumsum_
 from pyg_timeseries._psd import psd_correlation
 from pyg_timeseries._cor import correlation_codec
 from pyg_timeseries._ewm_psd import overlapping_returns
