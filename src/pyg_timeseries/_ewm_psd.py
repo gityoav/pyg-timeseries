@@ -122,6 +122,39 @@ def effective_sample(n: float, overlapping: int = 1) -> float:
     return (1 + w) / (1 - w) / overlapping
 
 
+def observation_rates(a, b, overlapping: int = 1) -> tuple:
+    """
+    The fraction of dates on which both of a pair is observed, and on which neither is - the two inputs
+    ``correlation_attenuation`` needs.
+
+    Measured from the output of ``_overlapping_returns``, so the rates describe exactly what the estimator sees. That
+    matters at overlapping > 1: measuring them by hand means reaching for ``rolling_sum`` on the raw series, which
+    sums the last k *observations* rather than the last k rows, and would report the rates of a window the estimator
+    never used.
+
+    :Parameters:
+    ------------
+    a, b : np.ndarray
+        the two markets' returns, nan where they did not trade.
+    overlapping : int
+        the same window length passed to the estimator.
+
+    :Returns:
+    ---------
+    (both, neither)
+
+    :Example:
+    ---------
+    >>> both, neither = observation_rates(a, b, overlapping = 5)                    # doctest: +SKIP
+    >>> attenuation = correlation_attenuation(1024, both, neither)                  # doctest: +SKIP
+    """
+    x, _ = _overlapping_returns(np.column_stack([a, b]), overlapping)
+    observed_a = ~np.isnan(x[:, 0])
+    observed_b = ~np.isnan(x[:, 1])
+    return float(np.mean(observed_a & observed_b)), float(np.mean(~observed_a & ~observed_b))
+
+
+
 def correlation_attenuation(n: float, both: float, neither: float = 0.0) -> float:
     """
     How much the geometric mean decay shrinks the correlation of a pair, given the fraction of dates on which the
@@ -131,10 +164,27 @@ def correlation_attenuation(n: float, both: float, neither: float = 0.0) -> floa
     The cross term reaches a steady state of (1 - w) * both / (1 - E[decay]) times the true covariance, while the
     two variances are unbiased, so this ratio is the attenuation of the correlation itself.
 
+    **both and neither are the rates of the series actually fed to the estimator**, not of the raw daily returns. At
+    ``overlapping = 1`` those are the same thing. At k > 1 a market counts as observed if it traded at least once in
+    the window, which is a different and much higher rate - use ``observation_rates(a, b, overlapping)`` rather than
+    measuring by hand.
+
+    There is deliberately no ``overlapping`` parameter. The formula needs no correction: when there are no mixed
+    dates it returns exactly 1, since both + neither = 1 makes the denominator both * (1 - w). What changes with a
+    window is only the inputs, and deriving them from a daily missing rate would need an independence assumption
+    across both time and the pair that real holiday calendars break - exchange-wide closures hit both markets at
+    once. Measuring is exact where modelling would be confidently wrong.
+
     :Example:
     ---------
     >>> assert correlation_attenuation(128, both=1.0) == 1.0        # no holidays, no attenuation
     >>> assert 0.95 < correlation_attenuation(128, both=0.94) < 1.0 # 6% mixed dates, a few percent
+    >>> assert correlation_attenuation(128, both=0.5, neither=0.5) == 1.0   # no mixed dates, exactly 1
+
+    :Example: a 5-day window removes the attenuation
+    ---------
+    At a 3% holiday rate a market is unobserved over a 5-row window only if it was shut for all five, so mixed dates
+    all but vanish and the attenuation goes to 1.0000 - against 0.9699 on daily returns.
     """
     w = _w(n)
     mixed = 1.0 - both - neither
@@ -177,13 +227,12 @@ def ewmcorr_psd_(
     mean = state.get("mean", np.zeros(m))
     weight = state.get("weight", np.zeros(m))
     count = state.get("count", np.zeros(m, dtype=np.int64))
-    values, tail = _overlapping_returns(np.asarray(values, dtype=float),                   # CHANGED: build the
-                                        overlapping, state.get("tail"))                    #          k-day return
+    values, tail = _overlapping_returns(np.asarray(values, dtype=float), overlapping, state.get("tail")) 
     res, s, mean, weight, count = _ewmcorr_psd(
         values,
         w=_w(n),
-        min_sample=min_sample,                                 # a fraction of the decay window, so not scaled
-        min_periods=min_periods * overlapping,                 # CHANGED: min_periods counts independent windows
+        min_sample=min_sample,                                 
+        min_periods=min_periods * overlapping,                 
         demean=demean,
         shrinkage=shrinkage,
         scale=scale,
