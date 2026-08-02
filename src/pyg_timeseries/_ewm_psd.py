@@ -6,7 +6,7 @@ from pyg_timeseries._math import  _w
 from pyg_timeseries._decorators import compiled
 from pyg_timeseries._rolling import rolling_sum
 
-def _overlapping_returns(values, overlapping, tail = None):
+def overlapping_returns(values, overlapping = 1, tail = None):
     """
     Calendar-anchored k-day returns
     
@@ -132,7 +132,7 @@ def ewmcorr_psd_(
     mean = state.get("mean", np.zeros(m))
     weight = state.get("weight", np.zeros(m))
     count = state.get("count", np.zeros(m, dtype=np.int64))
-    values, tail = _overlapping_returns(np.asarray(values, dtype=float), overlapping, state.get("tail")) 
+    values, tail = overlapping_returns(np.asarray(values, dtype=float), overlapping, state.get("tail")) 
     res, s, mean, weight, count = _ewmcorr_psd(
         values,
         w=_w(n),

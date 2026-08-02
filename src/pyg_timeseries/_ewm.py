@@ -4,7 +4,7 @@ from pyg_timeseries._decorators import compiled, first_, _data_state
 from pyg_timeseries._expanding import cumsum
 from pyg_timeseries._psd import psd_correlation
 from pyg_timeseries._cor import correlation_codec
-from pyg_timeseries._ewm_psd import _overlapping_returns
+from pyg_timeseries._ewm_psd import overlapping_returns
 
 from pyg_base import dictattr, pd2np, clock, loop_all, loop, is_pd, is_df, presync, df_concat, is_ts, is_num
 import numba
@@ -699,7 +699,7 @@ def ewmcorr_(a, n, min_sample = None, bias = False, overlapping = 1, instate = N
     tail = state.pop('tail', None)                                          
     if overlapping > 1:                                                     
         values = arr.values if is_df(arr) else arr                          
-        x, tail = _overlapping_returns(np.asarray(values, dtype = float), overlapping, tail)
+        x, tail = overlapping_returns(np.asarray(values, dtype = float), overlapping, tail)
         arr = pd.DataFrame(x, arr.index, arr.columns) if is_df(arr) else x
         overlapping = 1                                                     
     else:
