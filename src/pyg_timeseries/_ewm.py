@@ -685,33 +685,43 @@ def ewmcovar(a, n, min_sample = None, bias = False, overlapping = 1, instate = N
     return ewmcovar_(a, n, wgt = wgt, min_sample = min_sample, bias = bias, instate = instate , join = join, method = method, dtype = dtype, ffill = ffill, min_periods = min_periods).get('data')
 
 
-def ewmcorr_(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None,
+def ewmcorr_(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None,
+             wgt = None, dtype = None, ffill = True, min_periods = None,
              psd = False, min_eigenvalue = 1e-8, shrinkage = 0.):
     """
     This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
     See ewmcorr for full details.
-    
+
+    overlapping > 1 builds a k-day return over the last k calendar rows before the correlation is taken, the same
+    window for every market, so that markets closing at different times stay aligned. This is the same construction
+    ewmcorr_psd uses; see ``overlapping_returns``. Note the resulting observations overlap, so the effective sample
+    is roughly 1/k of the nominal 2n+1.
     """
     state = {} if instate is None else instate
     arr = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
     if wgt is None:
         wgt = np.full(arr.shape[0], 1)
-    tail = state.pop('tail', None)                                          
-    if overlapping > 1:                                                     
-        values = arr.values if is_df(arr) else arr                          
-        x, tail = _overlapping_returns(np.asarray(values, dtype = float), overlapping, tail)
+    tail = state.pop('tail', None)
+    cumsum_state = state.pop('cumsum', None)                                
+    if overlapping > 1:                                                    
+        values = arr.values if is_df(arr) else arr
+        x, tail = overlapping_returns(np.asarray(values, dtype = float), overlapping, tail)
         arr = pd.DataFrame(x, arr.index, arr.columns) if is_df(arr) else x
-        overlapping = 1                                                     
+        overlapping = 1
     else:
         tail = None
     if overlapping == 1:
         state['prev'] = state.pop('prev', np.zeros((arr.shape[1], arr.shape[1], 1)))
-    res = ewmcorrelation_(cumsum(arr), wgt = wgt, n = n, min_sample=min_sample, bias = bias, overlapping = overlapping, instate = state, join = join,
+    total = cumsum_(arr, instate = cumsum_state)                           
+    res = ewmcorrelation_(total.data, wgt = wgt, n = n, min_sample=min_sample, bias = bias,   
+                          overlapping = overlapping, instate = state, join = join,            
                           method = method, dtype = dtype, ffill = ffill, min_periods = min_periods,
                           psd = psd, min_eigenvalue=min_eigenvalue, shrinkage=shrinkage)
-    if tail is not None:                                                    
-        res['state']['tail'] = tail                                         
+    res['state']['cumsum'] = total.state                                    
+    if tail is not None:
+        res['state']['tail'] = tail
     return res
+
 
 ewmcorr_.output = ['data', 'state', 'index', 'columns']
 
