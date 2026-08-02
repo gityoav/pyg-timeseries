@@ -3,6 +3,7 @@ from pyg_timeseries._math import stdev_calculation_ewm, skew_calculation, cor_ca
 from pyg_timeseries._decorators import compiled, first_, _data_state
 from pyg_timeseries._expanding import cumsum
 from pyg_timeseries._psd import psd_correlation
+from pyg_timeseries._cor import correlation_codec
 
 from pyg_base import dictattr, pd2np, clock, loop_all, loop, is_pd, is_df, presync, df_concat, is_ts, is_num
 import numba
@@ -811,8 +812,7 @@ def ewmcorrelation_(a, n, min_sample = None, bias = False, overlapping = 1, inst
     state = {} if instate is None else instate
     arr = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
     dtype = dtype or np.float32
-    NAN = {np.int8: 127, np.int16: 32767}.get(dtype, np.nan)
-    ONE = {np.int8: 100, np.int16: 10000}.get(dtype, 1.0)
+    ONE, NAN = correlation_codec(dtype)
     if wgt is None:
         wgt = np.full(arr.shape[0], 1)
     state['prev'] = _prev(state.get('prev'), (arr.shape[1],arr.shape[1],overlapping))
@@ -1225,8 +1225,7 @@ def _ewmxt(a, b, n, wgt = None, time = None, t = None, a1 = None, a2 = None, b1 
     prev_b = _prev(prev_b, (a.shape[1], b.shape[1], overlapping))
     dim = _dim(calculation = calculation, dim = dim)
     dtype = dtype or np.float32
-    NAN = {np.int8: 127, np.int16: 32767}.get(dtype, np.nan)
-    ONE = {np.int8: 100, np.int16: 10000}.get(dtype, 1.0)
+    ONE, NAN = correlation_codec(dtype)
     if dim == 1:
         res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t, n1 = _ewmx(a = a, b = b, n = n, wgt = wgt, time = time,
                        a1 = a1, a2 = a2, b1 = b1, b2 = b2, w1 = w1, w2 = w2, n0 = n0, prev_a = prev_a, prev_b = prev_b,

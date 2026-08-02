@@ -1,6 +1,7 @@
 import numpy as np
 from pyg_base import df_concat, dictattr, is_df
-from pyg_timeseries._psd import  correlation_codec, quantisation_noise
+from pyg_timeseries._cor import correlation_codec
+from pyg_timeseries._psd import  quantisation_noise
 from pyg_timeseries._math import  _w
 from pyg_timeseries._decorators import compiled
 

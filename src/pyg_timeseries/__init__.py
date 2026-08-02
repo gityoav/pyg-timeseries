@@ -30,4 +30,5 @@ from pyg_timeseries._bar import bar_r2, bar_daily_to_eod, ohlc_r2
 from pyg_timeseries._track import minimize_tracking_error
 from pyg_timeseries._multibuffer import multibuffer, near_correlation_matrix, beta_correlation_matrix
 from pyg_timeseries._zmooth import zmooth, zmooth_
+from pyg_timeseries._cor import correlation_codec, decode_correlations, encode_correlations, CORRELATION_CODEC
 from pyg_timeseries._psd import psd_correlation, min_eigenvalues, clip_eigenvalues, normalise_diagonal
