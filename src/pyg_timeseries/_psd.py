@@ -96,6 +96,7 @@ def _valid_markets(matrix: np.ndarray) -> np.ndarray:
 def _psd_correlation_3d(
         correlations: np.ndarray,
         min_eigenvalue: float = 1e-8,
+        symmetric = True,
         shrinkage: float = 0.0,
         ffill: bool = True,
         dtype: type | np.dtype | None = None,
@@ -149,7 +150,7 @@ def _psd_correlation_3d(
         if ffill:
             matrix = np.where(np.isnan(matrix), previous, matrix)
             previous = matrix
-        repaired = psd_correlation(matrix, min_eigenvalue=min_eigenvalue, shrinkage=shrinkage)
+        repaired = psd_correlation(matrix, min_eigenvalue=min_eigenvalue, shrinkage=shrinkage, symmetric = symmetric)
         res[i] = encode_correlations(repaired, dtype=dtype)
     return res
 
@@ -158,7 +159,8 @@ def psd_correlation(matrix: np.ndarray,
                     min_eigenvalue: float = 1e-8, 
                     shrinkage: float = 0.0,
                     ffill: bool = True,
-                    dtype: type | np.dtype | None = None,                   
+                    dtype: type | np.dtype | None = None,
+                    symmetric = True,
                    ) -> np.ndarray:
     """
     Repairs an indefinite correlation matrix: clip the spectrum, rescale back to a unit diagonal, then optionally
@@ -193,6 +195,8 @@ def psd_correlation(matrix: np.ndarray,
     if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
         raise ValueError("psd_correlation needs a square (m, m) matrix or a (t, m, m) timeseries, got %s"
                          % (matrix.shape,))
+    if symmetric:
+        matrix = 0.5*(matrix + matrix.T)
     valid = _valid_markets(matrix)
     if not valid.any():
         return np.full(matrix.shape, np.nan)
