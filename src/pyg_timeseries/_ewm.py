@@ -4,6 +4,7 @@ from pyg_timeseries._decorators import compiled, first_, _data_state
 from pyg_timeseries._expanding import cumsum
 from pyg_timeseries._psd import psd_correlation
 from pyg_timeseries._cor import correlation_codec
+from pyg_timeseries._ewm_psd import _overlapping_returns
 
 from pyg_base import dictattr, pd2np, clock, loop_all, loop, is_pd, is_df, presync, df_concat, is_ts, is_num
 import numba
@@ -695,11 +696,22 @@ def ewmcorr_(a, n, min_sample = None, bias = False, overlapping = 1, instate = N
     arr = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
     if wgt is None:
         wgt = np.full(arr.shape[0], 1)
+    tail = state.pop('tail', None)                                          
+    if overlapping > 1:                                                     
+        values = arr.values if is_df(arr) else arr                          
+        x, tail = _overlapping_returns(np.asarray(values, dtype = float), overlapping, tail)
+        arr = pd.DataFrame(x, arr.index, arr.columns) if is_df(arr) else x
+        overlapping = 1                                                     
+    else:
+        tail = None
     if overlapping == 1:
         state['prev'] = state.pop('prev', np.zeros((arr.shape[1], arr.shape[1], 1)))
-    return ewmcorrelation_(cumsum(arr), wgt = wgt, n = n, min_sample=min_sample, bias = bias, overlapping = overlapping, instate = state, join = join, 
-                           method = method, dtype = dtype, ffill = ffill, min_periods = min_periods,
-                           psd = psd, min_eigenvalue=min_eigenvalue, shrinkage=shrinkage)   
+    res = ewmcorrelation_(cumsum(arr), wgt = wgt, n = n, min_sample=min_sample, bias = bias, overlapping = overlapping, instate = state, join = join,
+                          method = method, dtype = dtype, ffill = ffill, min_periods = min_periods,
+                          psd = psd, min_eigenvalue=min_eigenvalue, shrinkage=shrinkage)
+    if tail is not None:                                                    
+        res['state']['tail'] = tail                                         
+    return res
 
 ewmcorr_.output = ['data', 'state', 'index', 'columns']
 
