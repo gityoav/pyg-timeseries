@@ -4,8 +4,42 @@ from pyg_timeseries._cor import correlation_codec
 from pyg_timeseries._psd import  quantisation_noise
 from pyg_timeseries._math import  _w
 from pyg_timeseries._decorators import compiled
+from pyg_timeseries._rolling import rolling_sum
 
+def _overlapping_returns(values, overlapping, tail = None):
+    """
+    Calendar-anchored k-day returns
+    
+    :Parameters:
+    ------------
+    values : np.ndarray
+        (t, m) returns, nan where a market did not trade.
+    overlapping : int
+        window length k in rows. 1 returns the input unchanged.
+    tail : np.ndarray
+        the last k-1 rows of the previous batch, so that an incremental call sees full windows from its first date.
 
+    :Returns:
+    ---------
+    (x, tail) - the (t, m) k-day returns aligned to the input dates, and the tail to carry into the next call.
+
+    :Example:
+    ---------
+    >>> a = np.array([np.nan, np.nan, 1., 2., np.nan, 3., np.nan, np.nan, np.nan, np.nan]).reshape(-1, 1)
+    >>> x, _ = _overlapping_returns(a, 3)
+    >>> # observations in window: -, -, 1, 2, 2, 2, 1, 1, 0, 0
+    >>> # k-day return          : -, -, 1, 3, 3, 5, 3, 3, -, -   <- nan once the window holds nothing
+    """
+    if overlapping <= 1:
+        return values, np.zeros((0, values.shape[1]))
+    prefix = 0 if tail is None else len(tail)
+    joined = values if prefix == 0 else np.concatenate([tail, values])
+    observed = (~np.isnan(joined)).astype(float)
+    total = rolling_sum(np.where(observed > 0, joined, 0.0), overlapping)
+    count = rolling_sum(observed, overlapping)
+    x = np.where(count > 0, total, np.nan)
+    return x[prefix:], joined[-(overlapping - 1):]
+  
 @compiled
 def _ewmcorr_psd(a, w, min_sample, min_periods, demean, shrinkage, scale, nan, is_int, dtype, s,
                  mean,
@@ -64,21 +98,28 @@ def _ewmcorr_psd(a, w, min_sample, min_periods, demean, shrinkage, scale, nan, i
 
 
 
-
-def effective_sample(n: float) -> float:
+def effective_sample(n: float, overlapping: int = 1) -> float:
     """
-    The number of observations an exponentially weighted average of parameter n is worth, (1 + w) / (1 - w) = 2n + 1.
+    The number of observations an exponentially weighted average of parameter n is worth, (1 + w) / (1 - w) = 2n + 1,
+    divided by the overlap.
 
-    Worth checking against the number of markets before trusting the small eigenvalues of the result: at n = 128 and
-    200 markets the ratio is 200 / 257, at which the eigenvalues of pure noise already span roughly [0.014, 3.55].
-    Being positive semi-definite and being well conditioned are separate problems.
+    Sampling a k-day return every day means consecutive observations share k-1 days, so the exponentially weighted
+    average counts roughly k times more samples than it has independent information. This is a precision correction
+    rather than a bias one - for a stationary process the overlapping estimator is still consistent, because the
+    overlap scales the numerator and the denominator alike - but it is what should be compared against the number of
+    markets before trusting small eigenvalues or an inverse.
+
+    The 1/k factor is the large-sample limit for a flat rectangular window over serially uncorrelated returns. The
+    true factor depends on the window shape and on the autocorrelation of the underlying returns, so treat it as an
+    order-of-magnitude correction and not a precise one.
 
     :Example:
     ---------
     >>> assert effective_sample(128) == 257
+    >>> assert effective_sample(1024, overlapping = 5) == 2049 / 5      # ~410, against 146-200 markets
     """
     w = _w(n)
-    return (1 + w) / (1 - w)
+    return (1 + w) / (1 - w) / overlapping
 
 
 def correlation_attenuation(n: float, both: float, neither: float = 0.0) -> float:
@@ -104,6 +145,7 @@ def correlation_attenuation(n: float, both: float, neither: float = 0.0) -> floa
 def ewmcorr_psd_(
         a,
         n: float = 128,
+        overlapping: int = 1,
         min_sample: float = 0.25,
         min_periods: int = 1,
         demean: bool = True,
@@ -135,11 +177,13 @@ def ewmcorr_psd_(
     mean = state.get("mean", np.zeros(m))
     weight = state.get("weight", np.zeros(m))
     count = state.get("count", np.zeros(m, dtype=np.int64))
+    values, tail = _overlapping_returns(np.asarray(values, dtype=float),                   # CHANGED: build the
+                                        overlapping, state.get("tail"))                    #          k-day return
     res, s, mean, weight, count = _ewmcorr_psd(
-        np.asarray(values, dtype=float),
+        values,
         w=_w(n),
-        min_sample=min_sample,
-        min_periods=min_periods,
+        min_sample=min_sample,                                 # a fraction of the decay window, so not scaled
+        min_periods=min_periods * overlapping,                 # CHANGED: min_periods counts independent windows
         demean=demean,
         shrinkage=shrinkage,
         scale=scale,
@@ -151,7 +195,7 @@ def ewmcorr_psd_(
         weight=weight,
         count=count,
     )
-    state = dictattr(s=s, mean=mean, weight=weight, count=count)
+    state = dictattr(s=s, mean=mean, weight=weight, count=count, tail=tail)                # CHANGED: carry the tail
     index = arr.index if is_df(arr) else None
     columns = list(arr.columns) if is_df(arr) else None
     return dictattr(data=res, state=state, index=index, columns=columns)
@@ -163,6 +207,7 @@ ewmcorr_psd_.output = ["data", "state", "index", "columns"]
 def ewmcorr_psd(
         a,
         n: float = 128,
+        overlapping: int = 1,
         min_sample: float = 0.25,
         min_periods: int = 1,
         demean: bool = True,
@@ -275,6 +320,7 @@ def ewmcorr_psd(
     return ewmcorr_psd_(
         a,
         n=n,
+        overlapping = overlapping,
         min_sample=min_sample,
         min_periods=min_periods,
         demean=demean,
