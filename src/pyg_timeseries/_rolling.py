@@ -60,11 +60,22 @@ def _fnnz(a, n=1):
             i = i+1
             if i == _n:
                 return j
-            
+          
 
 @compiled
-def _ffill1d(a, n, prev, i):
+def _ffill1d(a, n, prev, i, start_decay = 0, end_decay = None):
+    """
+    >>> a = np.array([1., np.nan, np.nan, 2, np.nan]); n = 5; prev = 3.; i = 0; end_decay = 2; start_decay = 0
+    >>> _ffill1d(a, n, prev, i, end_decay = None, start_decay = 0)
+    Out[]: (array([1. , 1. , 1. , 2. , 2.]), 2.0, 1)
+    >>> _ffill1d(a, n, prev, i, end_decay = 2, start_decay = 0)
+    Out[]: (array([1. , 0.5, 0. , 2. , 1. ]), 2.0, 1) ### 0.5 instead of 1 because of decay to zero
+
+    """
     res = a.copy()
+    stales = np.zeros(a.shape[0])
+    if start_decay is None:
+        start_decay = 0
     for j in range(a.shape[0]):
         if np.isnan(a[j]):
             if n == 0:
@@ -78,24 +89,44 @@ def _ffill1d(a, n, prev, i):
         else:
             i = 0
             prev = a[j]
+        stales[j] = i
+    if end_decay is not None:
+        res = res * np.minimum(1,np.maximum(0, 1-(stales-start_decay)/(end_decay-start_decay)))
     return res, prev, i
 
+def _ffill2d(a, n, prev, i, start_decay = 0, end_decay = None):
+    """
+    >>> a = np.array([[1., np.nan, np.nan, 2, np.nan], [np.nan, np.nan, np.nan, np.nan, np.nan]]).T
+    >>> i = np.array([1,2])
+    >>> n = 5; 
+    >>> prev = np.array([3., 4.]); end_decay = 2; start_decay = 0
+    >>> _ffill2d(a, n, prev, i, end_decay = None, start_decay = 0)    
+    (array([[ 1.,  4.], 
+            [ 1.,  4.],
+            [ 1.,  4.],
+            [ 2., nan], ## stop filling, n = 5
+            [ 2., nan]]),
+     array([ 2., nan]),
+     array([1, 7]))
 
-def _ffill2d(a, n, prev, i):
+    >>> _ffill2d(a, n, prev, i, end_decay = 2, start_decay = 0)
+
+    (array([[1. , 0. ], ## 2nd score is 0 as it already decays 
+            [0.5, 0. ],
+            [0. , 0. ],
+            [2. , nan],
+            [1. , nan]]),
+     array([ 2., nan]),
+     array([1, 7]))
+
+    """
     res = a.copy()
-    if n:
-        for j in range(a.shape[0]):
-            mask = np.isnan(res[j])
-            i[mask]+=1
-            i[~mask] = 0
-            prev[i>n] = np.nan
-            res[j][mask] = prev[mask]
-            prev = res[j].copy()
-    else:
-        for j in range(a.shape[0]):
-            mask = np.isnan(res[j])
-            res[j][mask] = prev[mask]
-            prev = res[j]
+    i = i.copy()
+    prev = prev.copy()
+    for j in range(a.shape[1]):
+        res[:,j], prev[j], i[j] = _ffill1d(a = a[:,j], n = n[j], 
+                                           prev = prev[j], i = i[j], 
+                                           end_decay = end_decay[j], start_decay = start_decay[j]) 
     return res, prev, i
 
 
@@ -112,24 +143,80 @@ def _init2v(a, n = 0, new = np.nan):
         i+=1
     return res
 
+@compiled
+def _stale(a, i):
+    """
+    >>> a = np.array([1., np.nan, np.nan, 2, np.nan])
+    >>> _stale(a, 0)
+    """
+    res = np.zeros(a.shape)
+    for n in range(a.shape[0]):
+        res[n] = i = i+1 if np.isnan(a[n]) else 0
+    return res, i
+        
 
 @loop(dict, list)
 @pd2np
-def _ffill(a, n = 0, prev = None, i = None):
+def _staleness(a, i = None):
+    """
+    >>> a = np.array([1., np.nan, np.nan, 2, np.nan])
+    >>> _staleness(a, 0)
+    
+    >>> a = np.array([[1., np.nan, np.nan, 2, np.nan], [np.nan, np.nan, np.nan, np.nan, np.nan]]).T
+    >>> s = np.array([1,2])
+    >>> _staleness(a,s)
+
+    (array([[0., 3.],
+            [1., 4.],
+            [2., 5.],
+            [0., 6.],
+            [1., 7.]]),
+     array([1., 7.]))
+    """
     if is_num(a):
-        return a, prev, i
+        return a, (i or 0) + np.isnan(a)
     elif len(a.shape) == 1:
+        return _stale(a, i or 0)
+    else:
+        res = np.zeros(a.shape)
+        if i is None:
+            res_i = i = np.zeros(a.shape[1])
+        else:
+            res_i = i.copy()
+        for j in range(a.shape[1]):
+            res[:,j], res_i[j] = _stale(a[:,j], i[j])
+        return res, res_i
+
+def _as_w_array(value, w):
+    if isinstance(value, (list, np.ndarray)):
+        assert len(value) == w
+        return np.array(value)
+    else:
+        return np.full(w, value)
+
+@loop(dict, list)
+@pd2np
+def _ffill(a, n = 0, end_decay = None, start_decay = 0, prev = None, i = None):
+    if is_num(a):
+        return a, prev, i + np.isnan(a)
+    if start_decay is None:
+        start_decay = 0
+    if len(a.shape) == 1:
         if i is None:
             i = 0
         if prev is None:
             prev = np.nan
-        return _ffill1d(a, n, prev , i)
-    else:            
+        return _ffill1d(a, n, prev , i, start_decay= start_decay, end_decay=end_decay)
+    else:         
+        w = a.shape[1]
         if i is None:
-            i = np.zeros(a[0].shape)
+            i = np.zeros(w)
         if prev is None:
             prev = i + np.nan
-        return _ffill2d(a, n, prev , i)
+        n = _as_w_array(n, w)
+        start_decay = _as_w_array(start_decay, w)
+        end_decay = _as_w_array(end_decay, w)    
+        return _ffill2d(a, n, prev , i, start_decay = start_decay, end_decay=end_decay)
 
 
 
@@ -262,33 +349,6 @@ def _diff1(a, vec, time, i = 0, t = np.nan):
             vec[i] = a[j]
     return res, vec, i, t
 
-
-# @loop_all
-# @pd2np
-# @compiled
-# def _buffer(a, band, unit = 0.0, pos = 0, rounding_band = 0):
-#     """
-    
-#     Handles buffering when the rounding into units may be significant cost
-    
-    
-#     """
-#     res = np.full(a.shape, np.nan)
-#     b = floor = rounding_band * unit
-#     if np.isnan(pos):
-#         pos = 0.0
-#     for i in range(a.shape[0]):
-#         if not np.isnan(a[i]):
-#             if not np.isnan(band[i]): ## we forward fill band
-#                 b = max(band[i], floor)
-#             if pos < a[i] - b:
-#                 pos = a[i] - b
-#             elif pos > a[i] + b:
-#                 pos = a[i] + b
-#             res[i] = pos
-#     if unit > 0:
-#         pos = np.round(pos / unit) * unit
-#     return res, pos
 
 
 @loop_all
@@ -646,7 +706,9 @@ def bfill(a, n = -1, axis = 0):
     return _bfill(a, limit = n, axis = axis)
 
 
-def ffill(a, n=0, axis = 0, data = None, state = None):
+    
+
+def ffill(a, n=0, axis = 0, start_decay = 0, end_decay = None, data = None, state = None):
     """
     returns a forward filled array, up to n values forward. 
     supports state manegement which is needed if we want only nth
@@ -668,17 +730,25 @@ def ffill(a, n=0, axis = 0, data = None, state = None):
     >>> a = np.array([np.nan,np.nan,1,np.nan,np.nan,2,np.nan,np.nan,np.nan])
     >>> fnna(a, n=-2)
     """
-    state = state or Dict(prev = None, i = None)
-    return first_(_ffill(a, n=n, axis = axis, **state))
+    state = state or dict(prev = None, i = None)
+    return first_(_ffill(a, n=n, axis = axis, start_decay = start_decay, end_decay = end_decay, **state))
 
-def ffill_(a, n=0, axis = 0, instate = None):
+def staleness(a, state = None):    
+    state = {} if state is None else dict(i=int(state)) if is_num(state) else state
+    return first_(_staleness(a, **state))
+
+def staleness_(a, data = None, instate = None):
+    instate = {} if instate is None else dict(i=int(instate)) if is_num(instate) else instate
+    return _data_state(['data', 'i'],_staleness(a, **instate))
+
+def ffill_(a, n=0, axis = 0, start_decay = 0, end_decay = None, instate = None):
     """
     returns a forward filled array, up to n values forward. 
     supports state manegement
     
     """
     state = instate or dict(prev = None, i = None)
-    return _data_state(['data', 'prev', 'i'],_ffill(a, n=n, axis = axis, **state))
+    return _data_state(['data', 'prev', 'i'],_ffill(a, n=n, axis = axis, start_decay=start_decay, end_decay = end_decay, **state))
 
 ffill_.output = ['data', 'state']
 

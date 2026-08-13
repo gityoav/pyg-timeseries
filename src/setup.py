@@ -4,4 +4,4 @@ import platform
 from setuptools import setup, find_packages
 from distutils.core import Extension
 
-setup(name = 'pyg-timeseries', version = '0.0.69', packages = find_packages(), python_requires = '>=3.6.')
+setup(name = 'pyg-timeseries', version = '0.0.71', packages = find_packages(), python_requires = '>=3.6.')

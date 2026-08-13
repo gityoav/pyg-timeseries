@@ -1,5 +1,5 @@
 from pyg_timeseries import diff, ratio
-from pyg_timeseries import rolling_max, rolling_mean, rolling_median, rolling_quantile, rolling_rank, rolling_rms, rolling_skew, rolling_std, rolling_sum
+from pyg_timeseries import rolling_max, rolling_mean, rolling_median, rolling_quantile, rolling_rank, rolling_rms, rolling_skew, rolling_std, rolling_sum, ffill, staleness
 from pyg_base import eq, drange
 import pandas as pd
 import numpy as np
@@ -42,3 +42,28 @@ def test_not_enough_data_goes_to_nan():
     for a in inputs:
         b = rolling_max(a, 10)
         assert np.min(np.isnan(b))        
+
+def test_staleness():
+    a = np.array([np.nan, 1, np.nan, np.nan, 2, np.nan, np.nan, np.nan])
+    assert eq(staleness(a), np.array([1,0,1,2,0,1,2,3]))
+    assert eq(staleness(a, state = 3), np.array([4,0,1,2,0,1,2,3]))
+    assert eq(staleness(np.array([]), state = 3), np.array([]))
+    a = np.array([[np.nan, 1, np.nan, np.nan, 2, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]]).T
+    assert eq(staleness(a), np.array([[1,0,1,2,0,1,2,3],[1,2,3,4,5,6,7,8]]).T)
+
+def test_ffill():
+    n=0; axis = 0; start_decay = None; end_decay = None; data = None; state = None
+    a = np.array([np.nan, 1, np.nan, np.nan, 2, np.nan, np.nan, np.nan])
+    assert eq(ffill(a), np.array([np.nan, 1,1,1,2,2,2,2]))    
+    assert eq(ffill(a, state = dict(prev = 3, i = 2)), np.array([3, 1,1,1,2,2,2,2]))    
+    assert eq(ffill(a, n = 2, state = dict(prev = 3, i = 2)), np.array([np.nan, 1,1,1,2,2,2,np.nan]))    
+    assert eq(ffill(a, n = 2, end_decay = 2, state = dict(prev = 3, i = 2)), np.array([np.nan, 1,0.5,0,2,1,0,np.nan]))    
+
+def test_ffill_2d():
+    n=0; axis = 0; start_decay = None; end_decay = None; data = None; state = None
+    a = np.array([np.nan, 1, np.nan, np.nan, 2, np.nan, np.nan, np.nan])
+    t2 = lambda a: np.array([a,a]).T
+    a = t2(a)
+    assert eq(ffill(a), t2(np.array([np.nan, 1,1,1,2,2,2,2])))    
+    assert eq(ffill(a, n = [1,2]), np.array([[np.nan, 1,1,np.nan,2,2,np.nan,np.nan], [np.nan, 1,1,1,2,2,2,np.nan]]).T)    
+
