@@ -1,7 +1,11 @@
 import numpy as np; import pandas as pd
 from pyg_timeseries._math import stdev_calculation_ewm, skew_calculation, cor_calculation_ewm, covariance_calculation, LR_calculation_ewm, variance_calculation_ewm, _w
 from pyg_timeseries._decorators import compiled, first_, _data_state
-from pyg_timeseries._expanding import cumsum
+from pyg_timeseries._expanding import cumsum, cumsum_
+from pyg_timeseries._psd import psd_correlation
+from pyg_timeseries._cor import correlation_codec
+from pyg_timeseries._ewm_psd import overlapping_returns
+
 from pyg_base import dictattr, pd2np, clock, loop_all, loop, is_pd, is_df, presync, df_concat, is_ts, is_num
 import numba
 
@@ -681,24 +685,49 @@ def ewmcovar(a, n, min_sample = None, bias = False, overlapping = 1, instate = N
     return ewmcovar_(a, n, wgt = wgt, min_sample = min_sample, bias = bias, instate = instate , join = join, method = method, dtype = dtype, ffill = ffill, min_periods = min_periods).get('data')
 
 
-def ewmcorr_(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None):
+def ewmcorr_(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None,
+             wgt = None, dtype = None, ffill = True, min_periods = None,
+             psd = False, min_eigenvalue = 1e-8, shrinkage = 0.):
     """
     This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
     See ewmcorr for full details.
-    
+
+    overlapping > 1 builds a k-day return over the last k calendar rows before the correlation is taken, the same
+    window for every market, so that markets closing at different times stay aligned. This is the same construction
+    ewmcorr_psd uses; see ``overlapping_returns``. Note the resulting observations overlap, so the effective sample
+    is roughly 1/k of the nominal 2n+1.
     """
     state = {} if instate is None else instate
     arr = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
     if wgt is None:
         wgt = np.full(arr.shape[0], 1)
+    tail = state.pop('tail', None)
+    cumsum_state = state.pop('cumsum', None)                                
+    if overlapping > 1:                                                    
+        values = arr.values if is_df(arr) else arr
+        x, tail = overlapping_returns(np.asarray(values, dtype = float), overlapping, tail)
+        arr = pd.DataFrame(x, arr.index, arr.columns) if is_df(arr) else x
+        overlapping = 1
+    else:
+        tail = None
     if overlapping == 1:
         state['prev'] = state.pop('prev', np.zeros((arr.shape[1], arr.shape[1], 1)))
-    return ewmcorrelation_(cumsum(arr), wgt = wgt, n = n, min_sample=min_sample, bias = bias, overlapping = overlapping, instate = state, join = join, method = method, dtype = dtype, ffill = ffill, min_periods = min_periods)   
+    total = cumsum_(arr, instate = cumsum_state)                           
+    res = ewmcorrelation_(total.data, wgt = wgt, n = n, min_sample=min_sample, bias = bias,   
+                          overlapping = overlapping, instate = state, join = join,            
+                          method = method, dtype = dtype, ffill = ffill, min_periods = min_periods,
+                          psd = psd, min_eigenvalue=min_eigenvalue, shrinkage=shrinkage)
+    res['state']['cumsum'] = total.state                                    
+    if tail is not None:
+        res['state']['tail'] = tail
+    return res
+
 
 ewmcorr_.output = ['data', 'state', 'index', 'columns']
 
 
-def ewmcorr(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None):
+def ewmcorr(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None,
+            psd = False, min_eigenvalue = 1e-8, shrinkage = 0.):
     """
     This calculates a full correlation matrix as a timeseries. 
 
@@ -723,13 +752,18 @@ def ewmcorr(a, n, min_sample = None, bias = False, overlapping = 1, instate = No
         
     :Example: a pair of ts
     ---------
+    >>> from pyg_timeseries import *
     >>> rtn = np.random.normal(0,1,10000)
     >>> adj = cumsum(rtn)
     >>> x0 = ewmacd(adj, 10, 20, 30)[50:]
     >>> x1 = ewmacd(adj, 20, 40, 30)[50:]
-    >>> a = pd.DataFrame(np.array([x0,x1]).T, drange(-9949))
+    >>> x2 = ewmacd(adj, 40, 80, 30)[50:]
+    >>> x3 = ewmacd(adj, 80, 160, 30)[50:]
+    >>> a = pd.DataFrame(np.array([x0,x1,x2,x3]).T, drange(-9949))
     >>> n = 30
-    >>> res = ewmcorr(a, n, dtype = np.int8)
+    >>> res = ewmcorr(a, n)
+    >>> res_psd = ewmcorr(a, n, psd = True)
+
     >>> ts = pd.Series(res[:,0,1], a.index)
 
     >>> ts    
@@ -786,9 +820,12 @@ def ewmcorr(a, n, min_sample = None, bias = False, overlapping = 1, instate = No
     2025-03-10  1.0  0.846466  0.673574
     
     """
-    return ewmcorr_(a, n, wgt = wgt, min_sample = min_sample, bias = bias, overlapping = overlapping, instate = instate, join = join, method = method, dtype = dtype, ffill = ffill, min_periods = min_periods).get('data')
+    return ewmcorr_(a, n, wgt = wgt, min_sample = min_sample, bias = bias, overlapping = overlapping, instate = instate, join = join, 
+                    method = method, dtype = dtype, ffill = ffill, min_periods = min_periods, psd = psd, min_eigenvalue=min_eigenvalue, shrinkage=shrinkage).get('data')
 
-def ewmcorrelation_(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None):
+def ewmcorrelation_(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, 
+                    join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None,
+                    psd = False, min_eigenvalue = 1e-8, shrinkage = 0.0):
     """
     This calculates a full correlation matrix as a timeseries. Also returns the recent state of the calculations.
     See ewmcorrelation for full details.
@@ -797,19 +834,22 @@ def ewmcorrelation_(a, n, min_sample = None, bias = False, overlapping = 1, inst
     state = {} if instate is None else instate
     arr = df_concat(a, join = join, method = method) if isinstance(a, (list,dict)) else a
     dtype = dtype or np.float32
-    NAN = {np.int8: 127, np.int16: 32767}.get(dtype, np.nan)
-    ONE = {np.int8: 100, np.int16: 10000}.get(dtype, 1.0)
+    ONE, NAN = correlation_codec(dtype)
     if wgt is None:
         wgt = np.full(arr.shape[0], 1)
     state['prev'] = _prev(state.get('prev'), (arr.shape[1],arr.shape[1],overlapping))
     if isinstance(arr, np.ndarray):
         res, a0, a1, a2, aa, prev, w2, n0, n1 = _ewmcorrelation(arr, wgt = wgt, n = n, min_sample = min_sample, bias = bias, overlapping = overlapping, dtype = dtype, ffill = ffill, ONE = ONE, NAN = NAN, min_periods = min_periods, **state)
         state = dictattr(a0=a0, a1=a1, a2=a2, aa=aa, prev = prev, w2 = w2, n0 = n0, n1 = n1)
+        if psd:
+            res = psd_correlation(res, min_eigenvalue=min_eigenvalue, shrinkage=shrinkage, dtype = dtype, ffill = ffill)
         return dictattr(data = res, index = None, columns = None, state = state)
     elif is_df(arr):
         index = arr.index
         columns = list(arr.columns)
         res, a0, a1, a2, aa, prev, w2, n0, n1 = _ewmcorrelation(arr.values, wgt = wgt, n = n, min_sample = min_sample, bias = bias, overlapping = overlapping, dtype = dtype, ffill = ffill, ONE = ONE, NAN = NAN, min_periods = min_periods, **state)
+        if psd:
+            res = psd_correlation(res, min_eigenvalue=min_eigenvalue, shrinkage=shrinkage, dtype = dtype, ffill = ffill)
         state = dictattr(a0=a0, a1=a1, a2=a2, aa=aa, prev=prev, w2 = w2, n0 = n0, n1 = n1)
         return dictattr(data = res, columns = columns, index = index, state = state)
     else:
@@ -818,7 +858,8 @@ def ewmcorrelation_(a, n, min_sample = None, bias = False, overlapping = 1, inst
 ewmcorrelation_.output = ['data', 'state', 'index', 'columns']
 
 
-def ewmcorrelation(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None):
+def ewmcorrelation(a, n, min_sample = None, bias = False, overlapping = 1, instate = None, join = 'outer', method = None, wgt = None, dtype = None, ffill = True, min_periods = None,
+                   psd = False, min_eigenvalue = 1e-8, shrinkage = 0.0):
     """
     This calculates a full correlation matrix as a timeseries. 
 
@@ -874,7 +915,10 @@ def ewmcorrelation(a, n, min_sample = None, bias = False, overlapping = 1, insta
     >>> a_vs_all.ffill().plot()
         
     """
-    return ewmcorrelation_(a, n, min_sample = min_sample, bias = bias, overlapping = overlapping, instate = instate , join = join, method = method, wgt = wgt, dtype = dtype, ffill = ffill, min_periods = min_periods).get('data')
+    return ewmcorrelation_(a, n, min_sample = min_sample, bias = bias, overlapping = overlapping, instate = instate , join = join, 
+                           method = method, wgt = wgt, dtype = dtype, ffill = ffill, min_periods = min_periods, 
+                           psd = psd, min_eigenvalue=min_eigenvalue, shrinkage=shrinkage,
+                           ).get('data')
 
 
 
@@ -1203,8 +1247,7 @@ def _ewmxt(a, b, n, wgt = None, time = None, t = None, a1 = None, a2 = None, b1 
     prev_b = _prev(prev_b, (a.shape[1], b.shape[1], overlapping))
     dim = _dim(calculation = calculation, dim = dim)
     dtype = dtype or np.float32
-    NAN = {np.int8: 127, np.int16: 32767}.get(dtype, np.nan)
-    ONE = {np.int8: 100, np.int16: 10000}.get(dtype, 1.0)
+    ONE, NAN = correlation_codec(dtype)
     if dim == 1:
         res, a1, a2, b1, b2, ab, prev_a, prev_b, w1, w2, n0, t, n1 = _ewmx(a = a, b = b, n = n, wgt = wgt, time = time,
                        a1 = a1, a2 = a2, b1 = b1, b2 = b2, w1 = w1, w2 = w2, n0 = n0, prev_a = prev_a, prev_b = prev_b,
