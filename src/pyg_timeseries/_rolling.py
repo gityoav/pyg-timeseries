@@ -207,7 +207,7 @@ def _ffill(a, n = 0, end_decay = None, start_decay = 0, prev = None, i = None):
         if prev is None:
             prev = np.nan
         return _ffill1d(a, n, prev , i, start_decay= start_decay, end_decay=end_decay)
-    else:         
+    elif len(a.shape) == 2:
         w = a.shape[1]
         if i is None:
             i = np.zeros(w)
@@ -215,8 +215,16 @@ def _ffill(a, n = 0, end_decay = None, start_decay = 0, prev = None, i = None):
             prev = i + np.nan
         n = _as_w_array(n, w)
         start_decay = _as_w_array(start_decay, w)
-        end_decay = _as_w_array(end_decay, w)    
+        end_decay = _as_w_array(end_decay, w)
         return _ffill2d(a, n, prev , i, start_decay = start_decay, end_decay=end_decay)
+    else:
+        shape = a.shape
+        w = int(np.prod(shape[1:]))
+        res, prev, i = _ffill(np.reshape(a, (shape[0], w)), n = n, end_decay = end_decay,
+                              start_decay = start_decay,
+                              prev = None if prev is None else np.reshape(prev, w),
+                              i = None if i is None else np.reshape(i, w))
+        return np.reshape(res, shape), np.reshape(prev, shape[1:]), np.reshape(i, shape[1:])
 
 
 
