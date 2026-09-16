@@ -21,6 +21,8 @@ def _median(a):
     return np.median(a[~np.isnan(a)])
 
 def ts_median(a, axis = 0):
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
+        a = np.array(as_list(a))
     return _median(a, axis = axis)
 
 @pd2np
@@ -67,6 +69,8 @@ def ts_min(a, axis = 0, data = None, state = None):
     """
     ts_min(a) is equivalent to pandas a.min()
     """
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
+        a = np.array(as_list(a))
     state = state or {}
     return first_(_ts_min(a, axis = axis, **state))
     
@@ -74,6 +78,8 @@ def ts_min_(a, axis = 0, data = None, instate = None):
     """
     ts_min(a) is equivalent to pandas a.min()
     """
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
+        a = np.array(as_list(a))
     state = instate or {}
     res = _ts_min(a, axis = axis, **state)
     return _data_state(['data', 'm'], res)
@@ -94,6 +100,8 @@ def ts_max(a, axis = 0, data = None, state = None):
     """
     ts_max(a) is equivalent to pandas a.min()
     """
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
+        a = np.array(as_list(a))
     state = state or {}
     return first_(_ts_max(a, axis = axis, **state))
 
@@ -101,6 +109,8 @@ def ts_max_(a, axis = 0, data = None, instate = None):
     """
     ts_max(a) is equivalent to pandas a.min()
     """
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
+        a = np.array(as_list(a))
     state = instate or {}
     res = _ts_max(a, axis = axis, **state)
     return _data_state(['data', 'm'], res)
@@ -112,7 +122,7 @@ def _zip(value):
 
 @loop_all
 def _ts_count(a, vec = None):
-    vec = _vec(vec,1,0)
+    vec = _vec(a,vec,1,0)
     vec = _moments(a, vec)
     return vec[0], vec
     
@@ -143,6 +153,8 @@ def ts_count(a, axis = 0, data = None, state = None):
     >>> assert new == ts_count(a)
 
     """
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
+        a = np.array(as_list(a))
     state = state or {}
     return first_(_ts_count(a, axis = axis, **state))
 
@@ -151,6 +163,8 @@ def ts_count_(a, axis = 0, data = None, instate = None):
     ts_count_(a) is equivalent to ts_count(a) except vec is also returned.
     See ts_count for full documentation        
     """
+    if is_num(a) or (isinstance(a, list) and is_nums(a)):
+        a = np.array(as_list(a))
     state = instate or {}
     return _zip(_ts_count(a, axis = axis, **state))
 
@@ -273,7 +287,6 @@ def ts_mean_(a, axis = 0, data = None, instate = None):
     """
     state = instate or {}
     if is_num(a) or (isinstance(a, list) and is_nums(a)):
-
         a = np.array(as_list(a))
     return _zip(_ts_mean(a, axis = axis, **state))
 

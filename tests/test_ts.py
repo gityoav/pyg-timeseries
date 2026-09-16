@@ -25,6 +25,14 @@ def _data():
 
 d = _data()
 
+def test_ts_values_as_list():
+    a = [1,2,3,4,5]
+    assert ts_median(a) == 3
+    assert ts_mean(a) == 3
+    assert ts_count(a) == 5
+    assert round(ts_std(a)**2,6) == 2.5
+
+
 def test_ts_vs_numpy():
     for f in ewma, ewmskew, ewmrms, ewmstd, ewmvar, rolling_sum, rolling_mean, rolling_rms, rolling_std, rolling_skew, rolling_max, rolling_min, rolling_median:
         assert eq(f(d.ndf, 10).values, f(d.ndf.values, 10))
